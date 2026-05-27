@@ -63,16 +63,32 @@ Blue Dart's API doesn't publish hard rate limits but returns HTTP 429 when excee
 
 That's it — the API route and UI pick it up automatically.
 
-## Alerts
+## Alerts (owner-only for now)
 
-Users can register a tracking number + email and get notified whenever the carrier's status changes:
+The site is read-only for visitors — anyone can paste a tracking number and see the current status. Scheduled alerts are gated behind an `ADMIN_TOKEN`, so only the operator can register a watch. Public signup + per-user accounts will come later.
 
-1. Submit email + tracking number from the UI.
-2. Click the confirmation link in the email.
-3. A scheduled worker polls every 15 minutes, diffs against the last known event, and sends an email via Resend on change.
-4. Every notification email has a one-click unsubscribe link.
+When a watch is active, a scheduled worker polls every 15 minutes, diffs the latest event, and emails the configured address via Resend on any change. Every alert email has a one-click unsubscribe link.
 
-Notifier registry (`src/notifiers/`) is pluggable — email is implemented, `webhook` / `sms` / `slack` / `telegram` are registered stubs for future PRs.
+Notifier registry (`src/notifiers/`) is pluggable — email (Resend) is implemented; `webhook` / `sms` / `slack` / `telegram` are registered stubs for later.
+
+### Add / remove a watch (curl)
+
+```bash
+# Add
+curl -X POST https://your-app.workers.dev/api/watches \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "you@example.com",
+    "carrier": "bluedart",
+    "trackingNumber": "1234567890",
+    "label": "Mom’s package"
+  }'
+
+# Cancel — open the unsubscribe link from any alert email, OR:
+wrangler d1 execute shiptrack --remote \
+  --command "UPDATE watches SET status='cancelled' WHERE id='<watch-id>'"
+```
 
 ### Setup
 
@@ -86,12 +102,12 @@ npm run db:migrate
 npm run db:migrate:remote
 
 # 3. Set secrets on the web worker
-for k in TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL \
+for k in ADMIN_TOKEN TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL \
          BLUEDART_LICENSE_KEY BLUEDART_LOGIN_ID BLUEDART_API_KEY BLUEDART_ENV; do
   npx wrangler secret put "$k"
 done
 
-# 4. Set the same secrets on the poller
+# 4. Set the relevant secrets on the poller (no ADMIN_TOKEN needed there)
 for k in TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL \
          BLUEDART_LICENSE_KEY BLUEDART_LOGIN_ID BLUEDART_API_KEY BLUEDART_ENV; do
   npx wrangler secret put "$k" -c wrangler.poller.jsonc
@@ -101,7 +117,7 @@ done
 npm run deploy
 ```
 
-`TOKEN_SECRET` should be a random 32-byte hex string (`openssl rand -hex 32`). `RESEND_FROM` must be a verified sender in your Resend account.
+`ADMIN_TOKEN` and `TOKEN_SECRET` should each be a random 32-byte hex string (`openssl rand -hex 32`). `RESEND_FROM` must be a verified sender in your Resend account.
 
 ## Deploy to Cloudflare Workers
 

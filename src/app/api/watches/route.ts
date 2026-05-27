@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { z } from "zod";
-import { createWatch } from "@/lib/db";
-import { signToken } from "@/lib/tokens";
-import { sendEmail, confirmEmail } from "@/lib/email";
+import { createWatch, confirmWatch } from "@/lib/db";
 import { getCarrier } from "@/carriers/registry";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +14,21 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  const { env } = getCloudflareContext();
+  const e = env as unknown as {
+    DB: import("@cloudflare/workers-types").D1Database;
+    ADMIN_TOKEN: string;
+  };
+  if (!e.DB || !e.ADMIN_TOKEN) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
+
+  const auth = req.headers.get("authorization") ?? "";
+  const provided = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!provided || provided !== e.ADMIN_TOKEN) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
   const json = await req.json().catch(() => null);
   const parsed = Body.safeParse(json);
   if (!parsed.success) {
@@ -27,18 +40,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "carrier_not_supported" }, { status: 400 });
   }
 
-  const { env } = getCloudflareContext();
-  const e = env as unknown as {
-    DB: import("@cloudflare/workers-types").D1Database;
-    TOKEN_SECRET: string;
-    RESEND_API_KEY: string;
-    RESEND_FROM: string;
-    APP_URL: string;
-  };
-  if (!e.DB || !e.TOKEN_SECRET || !e.RESEND_API_KEY || !e.RESEND_FROM || !e.APP_URL) {
-    return NextResponse.json({ error: "not_configured" }, { status: 503 });
-  }
-
   const id = crypto.randomUUID();
   await createWatch(e.DB, {
     id,
@@ -47,28 +48,7 @@ export async function POST(req: NextRequest) {
     trackingNumber: trackingNumber.trim(),
     label: label ?? null,
   });
+  await confirmWatch(e.DB, id);
 
-  const token = await signToken(e.TOKEN_SECRET, id, "confirm", 7 * 24 * 3600);
-  const confirmUrl = `${e.APP_URL.replace(/\/$/, "")}/api/watches/confirm?token=${encodeURIComponent(token)}`;
-  const msg = confirmEmail({
-    appUrl: e.APP_URL,
-    confirmUrl,
-    carrier,
-    trackingNumber: trackingNumber.trim(),
-    label,
-  });
-
-  try {
-    await sendEmail(
-      { RESEND_API_KEY: e.RESEND_API_KEY, RESEND_FROM: e.RESEND_FROM, APP_URL: e.APP_URL },
-      { to: email, ...msg },
-    );
-  } catch (err) {
-    return NextResponse.json(
-      { error: "email_send_failed", message: err instanceof Error ? err.message : "unknown" },
-      { status: 502 },
-    );
-  }
-
-  return NextResponse.json({ status: "pending", id }, { status: 202 });
+  return NextResponse.json({ status: "active", id }, { status: 201 });
 }
