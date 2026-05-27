@@ -1,15 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "main": ".open-next/worker.js",
-  "name": "shiptrack",
+  "name": "shiptrack-poller",
+  "main": "workers/poller/index.ts",
   "compatibility_date": "2025-03-25",
   "compatibility_flags": [
     "nodejs_compat",
     "global_fetch_strictly_public"
   ],
-  "assets": {
-    "directory": ".open-next/assets",
-    "binding": "ASSETS"
+  "triggers": {
+    "crons": ["*/15 * * * *"]
   },
   "observability": {
     "enabled": true

@@ -63,6 +63,46 @@ Blue Dart's API doesn't publish hard rate limits but returns HTTP 429 when excee
 
 That's it — the API route and UI pick it up automatically.
 
+## Alerts
+
+Users can register a tracking number + email and get notified whenever the carrier's status changes:
+
+1. Submit email + tracking number from the UI.
+2. Click the confirmation link in the email.
+3. A scheduled worker polls every 15 minutes, diffs against the last known event, and sends an email via Resend on change.
+4. Every notification email has a one-click unsubscribe link.
+
+Notifier registry (`src/notifiers/`) is pluggable — email is implemented, `webhook` / `sms` / `slack` / `telegram` are registered stubs for future PRs.
+
+### Setup
+
+```bash
+# 1. Create the D1 database
+npx wrangler d1 create shiptrack
+# Copy the `database_id` into BOTH wrangler.jsonc and wrangler.poller.jsonc
+
+# 2. Apply schema (local + remote)
+npm run db:migrate
+npm run db:migrate:remote
+
+# 3. Set secrets on the web worker
+for k in TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL \
+         BLUEDART_LICENSE_KEY BLUEDART_LOGIN_ID BLUEDART_API_KEY BLUEDART_ENV; do
+  npx wrangler secret put "$k"
+done
+
+# 4. Set the same secrets on the poller
+for k in TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL \
+         BLUEDART_LICENSE_KEY BLUEDART_LOGIN_ID BLUEDART_API_KEY BLUEDART_ENV; do
+  npx wrangler secret put "$k" -c wrangler.poller.jsonc
+done
+
+# 5. Deploy both
+npm run deploy
+```
+
+`TOKEN_SECRET` should be a random 32-byte hex string (`openssl rand -hex 32`). `RESEND_FROM` must be a verified sender in your Resend account.
+
 ## Deploy to Cloudflare Workers
 
 This repo is configured for [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare).
