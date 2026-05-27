@@ -5,6 +5,14 @@ const BLUEDART_HOSTS = {
   staging: "https://apigateway-sandbox.bluedart.com",
 } as const;
 
+// Blue Dart auth (per the DHL API Portal "Authentication API" docs):
+//   GET {host}/in/transportation/token/v1/login
+//   Headers: ClientID, clientSecret
+//   Response: { JWTToken: "..." }
+//
+// The tracking API then takes the JWT in a header and the same credentials
+// echoed as URL query params `loginid` and `lickey` (Blue Dart legacy naming).
+
 function mapStatus(scanCode: string | undefined, scanType: string | undefined): ShipmentStatus {
   const code = (scanCode ?? "").toUpperCase();
   const type = (scanType ?? "").toUpperCase();
@@ -17,23 +25,23 @@ function mapStatus(scanCode: string | undefined, scanType: string | undefined): 
   return "unknown";
 }
 
-async function getJwt(licenseKey: string, loginId: string, apiKey: string, host: string): Promise<string> {
+async function getJwt(clientId: string, clientSecret: string, host: string): Promise<string> {
   const url = `${host}/in/transportation/token/v1/login`;
   const res = await fetch(url, {
     method: "GET",
     headers: {
-      ClientID: loginId,
-      "api-key": apiKey,
-      LicenseKey: licenseKey,
+      ClientID: clientId,
+      clientSecret: clientSecret,
       Accept: "application/json",
     },
     cache: "no-store",
   });
   if (!res.ok) {
-    throw new CarrierError(`Blue Dart auth failed (${res.status})`, "upstream_error", 502);
+    const body = await res.text().catch(() => "");
+    throw new CarrierError(`Blue Dart auth failed (${res.status}) ${body}`, "upstream_error", 502);
   }
   const body = (await res.json()) as { JWTToken?: string };
-  if (!body.JWTToken) throw new CarrierError("Blue Dart auth: no token", "upstream_error", 502);
+  if (!body.JWTToken) throw new CarrierError("Blue Dart auth: no token in response", "upstream_error", 502);
   return body.JWTToken;
 }
 
@@ -41,15 +49,14 @@ export const bluedart: Carrier = {
   id: "bluedart",
   name: "Blue Dart",
   async track(trackingNumber: string): Promise<TrackingResult> {
-    const licenseKey = process.env.BLUEDART_LICENSE_KEY;
-    const loginId = process.env.BLUEDART_LOGIN_ID;
-    const apiKey = process.env.BLUEDART_API_KEY;
+    const clientId = process.env.BLUEDART_CLIENT_ID;
+    const clientSecret = process.env.BLUEDART_CLIENT_SECRET;
     const env = (process.env.BLUEDART_ENV === "prod" ? "prod" : "staging") as keyof typeof BLUEDART_HOSTS;
     const host = BLUEDART_HOSTS[env];
 
-    if (!licenseKey || !loginId || !apiKey) {
+    if (!clientId || !clientSecret) {
       throw new CarrierError(
-        "Blue Dart credentials not configured. Set BLUEDART_LICENSE_KEY, BLUEDART_LOGIN_ID, BLUEDART_API_KEY.",
+        "Blue Dart credentials not configured. Set BLUEDART_CLIENT_ID, BLUEDART_CLIENT_SECRET.",
         "not_configured",
         503,
       );
@@ -60,8 +67,8 @@ export const bluedart: Carrier = {
       throw new CarrierError("Invalid Blue Dart tracking number format.", "invalid_input", 400);
     }
 
-    const jwt = await getJwt(licenseKey, loginId, apiKey, host);
-    const url = `${host}/in/transportation/tracking/v1/shipment?handler=tnt&loginid=${encodeURIComponent(loginId)}&awbno=${encodeURIComponent(cleaned)}&format=json&lickey=${encodeURIComponent(licenseKey)}&verno=1.3&scan=Y`;
+    const jwt = await getJwt(clientId, clientSecret, host);
+    const url = `${host}/in/transportation/tracking/v1/shipment?handler=tnt&loginid=${encodeURIComponent(clientId)}&awbno=${encodeURIComponent(cleaned)}&format=json&lickey=${encodeURIComponent(clientSecret)}&verno=1.3&scan=Y`;
 
     const res = await fetch(url, {
       method: "GET",

@@ -44,14 +44,20 @@ Response shape: see [`src/carriers/types.ts`](src/carriers/types.ts).
 
 ### Blue Dart
 
-Request API access at <https://apigateway.bluedart.com/>. Once approved, set:
+Blue Dart's tracking API is hosted on the [DHL Developer Portal](https://developer.dhl.com):
+
+1. Sign up, then **My Apps → Add Developer App**.
+2. Subscribe to **Shipment Tracking (DHL eCommerce India, Blue Dart)**.
+3. On the app page, reveal the **API Key** and **API Secret** values.
+4. Set them as:
 
 ```
-BLUEDART_LICENSE_KEY=...
-BLUEDART_LOGIN_ID=...
-BLUEDART_API_KEY=...
-BLUEDART_ENV=staging   # or "prod"
+BLUEDART_CLIENT_ID=<API Key>
+BLUEDART_CLIENT_SECRET=<API Secret>
+BLUEDART_ENV=prod   # or "staging" for sandbox
 ```
+
+**Note:** the portal says newly-created apps need ~24 hours after creation before auth calls succeed, even if the status shows "Approved" immediately.
 
 Blue Dart's API doesn't publish hard rate limits but returns HTTP 429 when exceeded. Polling once per 15–30 minutes per shipment is plenty.
 
@@ -103,13 +109,13 @@ npm run db:migrate:remote
 
 # 3. Set secrets on the web worker
 for k in ADMIN_TOKEN TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL \
-         BLUEDART_LICENSE_KEY BLUEDART_LOGIN_ID BLUEDART_API_KEY BLUEDART_ENV; do
+         BLUEDART_CLIENT_ID BLUEDART_CLIENT_SECRET BLUEDART_ENV; do
   npx wrangler secret put "$k"
 done
 
 # 4. Set the relevant secrets on the poller (no ADMIN_TOKEN needed there)
 for k in TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL \
-         BLUEDART_LICENSE_KEY BLUEDART_LOGIN_ID BLUEDART_API_KEY BLUEDART_ENV; do
+         BLUEDART_CLIENT_ID BLUEDART_CLIENT_SECRET BLUEDART_ENV; do
   npx wrangler secret put "$k" -c wrangler.poller.jsonc
 done
 

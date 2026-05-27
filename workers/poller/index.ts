@@ -11,9 +11,8 @@ interface Env {
   RESEND_API_KEY: string;
   RESEND_FROM: string;
   APP_URL: string;
-  BLUEDART_LICENSE_KEY?: string;
-  BLUEDART_LOGIN_ID?: string;
-  BLUEDART_API_KEY?: string;
+  BLUEDART_CLIENT_ID?: string;
+  BLUEDART_CLIENT_SECRET?: string;
   BLUEDART_ENV?: string;
 }
 
@@ -40,9 +39,8 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
   // which is shimmed by nodejs_compat — so we set them on globalThis.process.env.)
   const procEnv = (globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env;
   if (procEnv) {
-    if (env.BLUEDART_LICENSE_KEY) procEnv.BLUEDART_LICENSE_KEY = env.BLUEDART_LICENSE_KEY;
-    if (env.BLUEDART_LOGIN_ID) procEnv.BLUEDART_LOGIN_ID = env.BLUEDART_LOGIN_ID;
-    if (env.BLUEDART_API_KEY) procEnv.BLUEDART_API_KEY = env.BLUEDART_API_KEY;
+    if (env.BLUEDART_CLIENT_ID) procEnv.BLUEDART_CLIENT_ID = env.BLUEDART_CLIENT_ID;
+    if (env.BLUEDART_CLIENT_SECRET) procEnv.BLUEDART_CLIENT_SECRET = env.BLUEDART_CLIENT_SECRET;
     if (env.BLUEDART_ENV) procEnv.BLUEDART_ENV = env.BLUEDART_ENV;
   }
 
