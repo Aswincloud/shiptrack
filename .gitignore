@@ -15,3 +15,5 @@ dist
 cloudflare-env.d.ts
 next-env.d.ts
 tsconfig.tsbuildinfo
+.secrets.json
+.secrets.poller.json
