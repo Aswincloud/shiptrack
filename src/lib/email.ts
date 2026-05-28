@@ -90,6 +90,44 @@ export function statusChangeEmail(args: {
   return { subject, html, text };
 }
 
+export function otpEmail(args: {
+  code: string;
+  ttlMinutes: number;
+}): { subject: string; html: string; text: string } {
+  const subject = `Your ShipTrack verification code: ${args.code}`;
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;padding:24px;color:#111">
+      <h2 style="margin:0 0 12px">Verify your email</h2>
+      <p>Use this code to finish signing up for ShipTrack:</p>
+      <p style="font-size:32px;font-weight:700;letter-spacing:6px;background:#f4f6f8;padding:16px 20px;border-radius:8px;text-align:center;margin:20px 0">
+        ${args.code}
+      </p>
+      <p style="color:#666;font-size:13px">The code expires in ${args.ttlMinutes} minutes. If you didn't try to sign up, you can ignore this email.</p>
+    </div>
+  `;
+  const text = `Your ShipTrack verification code: ${args.code} (expires in ${args.ttlMinutes} minutes)`;
+  return { subject, html, text };
+}
+
+export function passwordResetEmail(args: {
+  resetUrl: string;
+  ttlHours: number;
+}): { subject: string; html: string; text: string } {
+  const subject = "Reset your ShipTrack password";
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;padding:24px;color:#111">
+      <h2 style="margin:0 0 12px">Reset your password</h2>
+      <p>Click below to choose a new password:</p>
+      <p style="margin:24px 0">
+        <a href="${args.resetUrl}" style="background:#4f9eff;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Reset password</a>
+      </p>
+      <p style="color:#666;font-size:13px">This link expires in ${args.ttlHours} hour${args.ttlHours === 1 ? "" : "s"}. Didn't request this? Ignore the email.</p>
+    </div>
+  `;
+  const text = `Reset your ShipTrack password: ${args.resetUrl} (expires in ${args.ttlHours}h)`;
+  return { subject, html, text };
+}
+
 function humanStatus(s: string): string {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

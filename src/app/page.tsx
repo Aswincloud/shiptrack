@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { TrackingResult } from "@/carriers/types";
+import { inputStyle, buttonStyle, cardStyle } from "./styles";
 
 export default function Home() {
   const [carrier, setCarrier] = useState("bluedart");
@@ -101,41 +103,43 @@ export default function Home() {
       )}
 
       <footer style={{ marginTop: 48, color: "var(--muted)", fontSize: 13 }}>
-        <a href="https://github.com/aswin/shiptrack">Source on GitHub</a> · MIT licensed
+        <a href="https://github.com/Aswincloud/shiptrack">Source on GitHub</a> · MIT licensed
       </footer>
     </main>
   );
 }
 
+interface Me {
+  userId: string;
+  email: string;
+}
+
 function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumber: string }) {
+  const [me, setMe] = useState<Me | null | undefined>(undefined); // undefined = loading
   const [email, setEmail] = useState("");
   const [label, setLabel] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((b: Me | null) => {
+        setMe(b);
+        if (b?.email) setEmail(b.email);
+      })
+      .catch(() => setMe(null));
+  }, []);
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
     setSubmitting(true);
     setStatus(null);
-
-    let token = typeof window !== "undefined" ? window.localStorage.getItem("shiptrack_admin_token") : "";
-    if (!token) {
-      token = typeof window !== "undefined" ? window.prompt("Admin token") : null;
-      if (!token) {
-        setSubmitting(false);
-        return;
-      }
-      window.localStorage.setItem("shiptrack_admin_token", token);
-    }
-
     try {
       const res = await fetch("/api/watches", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: email.trim(),
           carrier,
@@ -144,14 +148,10 @@ function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumb
         }),
       });
       const body = await res.json();
-      if (res.status === 401) {
-        window.localStorage.removeItem("shiptrack_admin_token");
-        setStatus({ kind: "err", msg: "Invalid admin token. Try again." });
-      } else if (!res.ok) {
+      if (!res.ok) {
         setStatus({ kind: "err", msg: body.message ?? body.error ?? "Failed to register watch" });
       } else {
-        setStatus({ kind: "ok", msg: `Watching this shipment. You'll get an email at ${email} on status changes.` });
-        setEmail("");
+        setStatus({ kind: "ok", msg: `Watching. You'll get an email at ${email} on status changes.` });
         setLabel("");
       }
     } catch (err) {
@@ -159,6 +159,19 @@ function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumb
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (me === undefined) return null;
+
+  if (me === null) {
+    return (
+      <div style={{ ...cardStyle, marginTop: 16, textAlign: "center" }}>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>Get notified on status changes</div>
+        <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>
+          <Link href="/login">Sign in</Link> or <Link href="/signup">create an account</Link> to email yourself updates.
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -200,30 +213,3 @@ function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumb
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  background: "var(--card)",
-  color: "var(--fg)",
-  border: "1px solid var(--border)",
-  borderRadius: 8,
-  padding: "10px 12px",
-  fontSize: 14,
-};
-
-const buttonStyle: React.CSSProperties = {
-  background: "var(--accent)",
-  color: "#fff",
-  border: "none",
-  borderRadius: 8,
-  padding: "10px 18px",
-  fontSize: 14,
-  fontWeight: 500,
-  cursor: "pointer",
-};
-
-const cardStyle: React.CSSProperties = {
-  background: "var(--card)",
-  border: "1px solid var(--border)",
-  borderRadius: 12,
-  padding: 20,
-};

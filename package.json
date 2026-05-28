@@ -15,8 +15,8 @@
     "deploy:web": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "deploy:poller": "wrangler deploy -c wrangler.poller.jsonc",
     "deploy": "npm run deploy:web && npm run deploy:poller",
-    "db:migrate": "wrangler d1 execute shiptrack --file=migrations/0001_init.sql",
-    "db:migrate:remote": "wrangler d1 execute shiptrack --remote --file=migrations/0001_init.sql",
+    "db:migrate": "for f in migrations/*.sql; do wrangler d1 execute shiptrack --file=$f || exit 1; done",
+    "db:migrate:remote": "for f in migrations/*.sql; do wrangler d1 execute shiptrack --remote --file=$f || exit 1; done",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {

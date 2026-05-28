@@ -2,6 +2,7 @@ import type { D1Database } from "@cloudflare/workers-types";
 
 export interface WatchRow {
   id: string;
+  user_id: string | null;
   email: string;
   carrier: string;
   tracking_number: string;
@@ -14,28 +15,66 @@ export interface WatchRow {
   confirmed_at: number | null;
 }
 
+export interface UserRow {
+  id: string;
+  email: string;
+  password_hash: string;
+  email_verified: number;
+  resend_api_key: string | null;
+  created_at: number;
+}
+
+export interface OtpRow {
+  email: string;
+  code_hash: string;
+  expires_at: number;
+  attempts: number;
+  created_at: number;
+}
+
 export interface NewWatch {
   id: string;
   email: string;
   carrier: string;
   trackingNumber: string;
   label?: string | null;
+  userId?: string | null;
 }
 
 export async function createWatch(db: D1Database, w: NewWatch): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   await db
     .prepare(
-      `INSERT INTO watches (id, email, carrier, tracking_number, label, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+      `INSERT INTO watches (id, user_id, email, carrier, tracking_number, label, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
     )
-    .bind(w.id, w.email, w.carrier, w.trackingNumber, w.label ?? null, now)
+    .bind(w.id, w.userId ?? null, w.email, w.carrier, w.trackingNumber, w.label ?? null, now)
     .run();
 }
 
 export async function getWatch(db: D1Database, id: string): Promise<WatchRow | null> {
   const row = await db.prepare(`SELECT * FROM watches WHERE id = ?`).bind(id).first<WatchRow>();
   return row ?? null;
+}
+
+export async function getWatchForUser(
+  db: D1Database,
+  id: string,
+  userId: string,
+): Promise<WatchRow | null> {
+  const row = await db
+    .prepare(`SELECT * FROM watches WHERE id = ? AND user_id = ?`)
+    .bind(id, userId)
+    .first<WatchRow>();
+  return row ?? null;
+}
+
+export async function listWatchesByUser(db: D1Database, userId: string): Promise<WatchRow[]> {
+  const res = await db
+    .prepare(`SELECT * FROM watches WHERE user_id = ? ORDER BY created_at DESC`)
+    .bind(userId)
+    .all<WatchRow>();
+  return res.results ?? [];
 }
 
 export async function confirmWatch(db: D1Database, id: string): Promise<boolean> {
@@ -51,6 +90,43 @@ export async function cancelWatch(db: D1Database, id: string): Promise<boolean> 
   const res = await db
     .prepare(`UPDATE watches SET status='cancelled' WHERE id=? AND status != 'cancelled'`)
     .bind(id)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+export async function cancelWatchForUser(
+  db: D1Database,
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const res = await db
+    .prepare(`UPDATE watches SET status='cancelled' WHERE id=? AND user_id=? AND status != 'cancelled'`)
+    .bind(id, userId)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+export async function updateWatchForUser(
+  db: D1Database,
+  id: string,
+  userId: string,
+  patch: { label?: string | null; email?: string },
+): Promise<boolean> {
+  const fields: string[] = [];
+  const values: (string | null)[] = [];
+  if (patch.label !== undefined) {
+    fields.push("label = ?");
+    values.push(patch.label);
+  }
+  if (patch.email !== undefined) {
+    fields.push("email = ?");
+    values.push(patch.email);
+  }
+  if (fields.length === 0) return false;
+  values.push(id, userId);
+  const res = await db
+    .prepare(`UPDATE watches SET ${fields.join(", ")} WHERE id = ? AND user_id = ?`)
+    .bind(...values)
     .run();
   return (res.meta?.changes ?? 0) > 0;
 }
@@ -117,4 +193,101 @@ export async function recordEvent(
     )
     .bind(watchId, ev.status, ev.description ?? null, ev.location ?? null, ev.timestamp ?? null, now)
     .run();
+}
+
+// --- Users ---
+
+export async function createUser(
+  db: D1Database,
+  u: { id: string; email: string; passwordHash: string },
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO users (id, email, password_hash, email_verified, created_at)
+       VALUES (?, ?, ?, 0, ?)`,
+    )
+    .bind(u.id, u.email, u.passwordHash, now)
+    .run();
+}
+
+export async function getUserByEmail(db: D1Database, email: string): Promise<UserRow | null> {
+  const row = await db
+    .prepare(`SELECT * FROM users WHERE email = ?`)
+    .bind(email)
+    .first<UserRow>();
+  return row ?? null;
+}
+
+export async function getUserById(db: D1Database, id: string): Promise<UserRow | null> {
+  const row = await db.prepare(`SELECT * FROM users WHERE id = ?`).bind(id).first<UserRow>();
+  return row ?? null;
+}
+
+export async function markEmailVerified(db: D1Database, userId: string): Promise<void> {
+  await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = ?`).bind(userId).run();
+}
+
+export async function updateUserPasswordHash(
+  db: D1Database,
+  userId: string,
+  passwordHash: string,
+): Promise<void> {
+  await db
+    .prepare(`UPDATE users SET password_hash = ? WHERE id = ?`)
+    .bind(passwordHash, userId)
+    .run();
+}
+
+export async function updateUserResendKey(
+  db: D1Database,
+  userId: string,
+  key: string | null,
+): Promise<void> {
+  await db
+    .prepare(`UPDATE users SET resend_api_key = ? WHERE id = ?`)
+    .bind(key, userId)
+    .run();
+}
+
+// --- OTP ---
+
+export async function upsertOtp(
+  db: D1Database,
+  email: string,
+  codeHash: string,
+  expiresAt: number,
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO otp_codes (email, code_hash, expires_at, attempts, created_at)
+       VALUES (?, ?, ?, 0, ?)
+       ON CONFLICT(email) DO UPDATE SET
+         code_hash = excluded.code_hash,
+         expires_at = excluded.expires_at,
+         attempts = 0,
+         created_at = excluded.created_at`,
+    )
+    .bind(email, codeHash, expiresAt, now)
+    .run();
+}
+
+export async function getOtp(db: D1Database, email: string): Promise<OtpRow | null> {
+  const row = await db
+    .prepare(`SELECT * FROM otp_codes WHERE email = ?`)
+    .bind(email)
+    .first<OtpRow>();
+  return row ?? null;
+}
+
+export async function incrementOtpAttempts(db: D1Database, email: string): Promise<void> {
+  await db
+    .prepare(`UPDATE otp_codes SET attempts = attempts + 1 WHERE email = ?`)
+    .bind(email)
+    .run();
+}
+
+export async function deleteOtp(db: D1Database, email: string): Promise<void> {
+  await db.prepare(`DELETE FROM otp_codes WHERE email = ?`).bind(email).run();
 }

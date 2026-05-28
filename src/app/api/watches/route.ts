@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { z } from "zod";
+import { getEnv } from "@/lib/env";
 import { createWatch, confirmWatch } from "@/lib/db";
 import { getCarrier } from "@/carriers/registry";
+import { readSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,19 +15,23 @@ const Body = z.object({
 });
 
 export async function POST(req: NextRequest) {
-  const { env } = getCloudflareContext();
-  const e = env as unknown as {
-    DB: import("@cloudflare/workers-types").D1Database;
-    ADMIN_TOKEN: string;
-  };
-  if (!e.DB || !e.ADMIN_TOKEN) {
+  const env = getEnv();
+  if (!env.DB || !env.TOKEN_SECRET) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }
 
-  const auth = req.headers.get("authorization") ?? "";
-  const provided = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  if (!provided || provided !== e.ADMIN_TOKEN) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Auth: prefer session cookie. Fall back to ADMIN_TOKEN bearer for legacy /
+  // owner curl flow. One of the two must succeed.
+  const session = await readSession(env.TOKEN_SECRET, req);
+  let userId: string | null = null;
+  if (session) {
+    userId = session.userId;
+  } else {
+    const auth = req.headers.get("authorization") ?? "";
+    const provided = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    if (!env.ADMIN_TOKEN || !provided || provided !== env.ADMIN_TOKEN) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
   }
 
   const json = await req.json().catch(() => null);
@@ -41,14 +46,15 @@ export async function POST(req: NextRequest) {
   }
 
   const id = crypto.randomUUID();
-  await createWatch(e.DB, {
+  await createWatch(env.DB, {
     id,
+    userId,
     email: email.toLowerCase(),
     carrier: carrier.toLowerCase(),
     trackingNumber: trackingNumber.trim(),
     label: label ?? null,
   });
-  await confirmWatch(e.DB, id);
+  await confirmWatch(env.DB, id);
 
   return NextResponse.json({ status: "active", id }, { status: 201 });
 }

@@ -1,7 +1,11 @@
-export type TokenPurpose = "confirm" | "unsubscribe";
+export type TokenPurpose = "confirm" | "unsubscribe" | "session" | "password_reset";
 
+// Payload uses a single subject field `s`. Older tokens (issued before this
+// refactor) used `w` for watchId — kept as a fallback in verifyToken so
+// existing unsubscribe links keep working.
 interface Payload {
-  w: string;
+  s?: string;
+  w?: string;
   p: TokenPurpose;
   e?: number;
 }
@@ -42,11 +46,11 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 
 export async function signToken(
   secret: string,
-  watchId: string,
+  subject: string,
   purpose: TokenPurpose,
   expSeconds?: number,
 ): Promise<string> {
-  const payload: Payload = { w: watchId, p: purpose };
+  const payload: Payload = { s: subject, p: purpose };
   if (expSeconds) payload.e = Math.floor(Date.now() / 1000) + expSeconds;
   const body = b64urlEncode(new TextEncoder().encode(JSON.stringify(payload)));
   const sig = b64urlEncode(await hmac(secret, body));
@@ -72,5 +76,5 @@ export async function verifyToken(
   }
   if (payload.p !== purpose) return null;
   if (payload.e && payload.e < Math.floor(Date.now() / 1000)) return null;
-  return payload.w;
+  return payload.s ?? payload.w ?? null;
 }
