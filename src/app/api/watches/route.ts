@@ -4,7 +4,6 @@ import { getEnv } from "@/lib/env";
 import {
   createWatch,
   confirmWatch,
-  getUserById,
   MIN_POLL_INTERVAL_SECONDS,
   MAX_POLL_INTERVAL_SECONDS,
 } from "@/lib/db";
@@ -79,16 +78,6 @@ export async function POST(req: NextRequest) {
   // Best-effort confirmation email so the user knows the watch is registered
   // and has an immediate unsubscribe link.
   if (env.RESEND_API_KEY && env.RESEND_FROM) {
-    let resendKey = env.RESEND_API_KEY;
-    if (userId) {
-      try {
-        const user = await getUserById(env.DB, userId);
-        if (user?.resend_api_key) resendKey = user.resend_api_key;
-      } catch {
-        // Fall back to the system key.
-      }
-    }
-
     const unsubToken = await signToken(env.TOKEN_SECRET, id, "unsubscribe");
     const unsubscribeUrl = `${env.APP_URL.replace(/\/$/, "")}/api/watches/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
 
@@ -101,7 +90,7 @@ export async function POST(req: NextRequest) {
     });
     try {
       await sendEmail(
-        { RESEND_API_KEY: resendKey, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
+        { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
         { to: cleanedEmail, ...tpl },
       );
     } catch (err) {

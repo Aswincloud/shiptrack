@@ -25,7 +25,6 @@ export default async function DashboardPage() {
   return (
     <DashboardClient
       email={user.email}
-      resendKeyConfigured={!!user.resend_api_key}
       initialWatches={watches.map(serializeWatch)}
       isAdmin={isAdmin}
       adminUsers={adminUsers}

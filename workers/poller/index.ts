@@ -1,5 +1,5 @@
 import type { D1Database, ScheduledController, ExecutionContext } from "@cloudflare/workers-types";
-import { listDueWatches, markPolled, recordEvent, getUserById, type WatchRow } from "../../src/lib/db";
+import { listDueWatches, markPolled, recordEvent, type WatchRow } from "../../src/lib/db";
 import { signToken } from "../../src/lib/tokens";
 import { getCarrier } from "../../src/carriers/registry";
 import { emailResend } from "../../src/notifiers/email-resend";
@@ -62,21 +62,9 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
   const unsubToken = await signToken(env.TOKEN_SECRET, w.id, "unsubscribe");
   const unsubscribeUrl = `${env.APP_URL.replace(/\/$/, "")}/api/watches/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
 
-  // Per-user Resend key override: if the watch belongs to a user with a custom
-  // Resend API key set on their account, use that instead of the system key.
-  let resendApiKey = env.RESEND_API_KEY;
-  if (w.user_id) {
-    try {
-      const user = await getUserById(env.DB, w.user_id);
-      if (user?.resend_api_key) resendApiKey = user.resend_api_key;
-    } catch (err) {
-      console.warn(`user lookup failed for ${w.user_id}:`, err instanceof Error ? err.message : err);
-    }
-  }
-
   try {
     await emailResend.send(
-      { RESEND_API_KEY: resendApiKey, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
+      { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
       {
         to: w.email,
         watch: w,

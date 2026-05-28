@@ -18,6 +18,5 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     userId: user.id,
     email: user.email,
-    resendKeyConfigured: !!user.resend_api_key,
   });
 }

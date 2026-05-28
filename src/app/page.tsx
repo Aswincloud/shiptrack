@@ -210,10 +210,16 @@ export default function Home() {
       )}
 
       <footer style={{ marginTop: 64, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
-        <a href="https://github.com/Aswincloud/shiptrack" style={{ color: "var(--muted)" }}>
-          ★ Source on GitHub
-        </a>{" "}
-        · MIT licensed
+        <div style={{ display: "flex", justifyContent: "center", gap: 14, flexWrap: "wrap", marginBottom: 10 }}>
+          <Link href="/faq" style={{ color: "var(--muted)" }}>FAQ</Link>
+          <span style={{ color: "var(--muted-soft)" }}>·</span>
+          <Link href="/privacy" style={{ color: "var(--muted)" }}>Privacy</Link>
+          <span style={{ color: "var(--muted-soft)" }}>·</span>
+          <Link href="/terms" style={{ color: "var(--muted)" }}>Terms</Link>
+          <span style={{ color: "var(--muted-soft)" }}>·</span>
+          <a href="https://github.com/Aswincloud/shiptrack" style={{ color: "var(--muted)" }}>GitHub</a>
+        </div>
+        <div>MIT licensed · made by <a href="mailto:aswin@aswincloud.com" style={{ color: "var(--muted)" }}>Aswin</a></div>
       </footer>
     </main>
   );

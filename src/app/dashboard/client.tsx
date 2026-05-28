@@ -29,20 +29,17 @@ interface AdminUser {
 
 export function DashboardClient({
   email,
-  resendKeyConfigured: initialResendKey,
   initialWatches,
   isAdmin,
   adminUsers,
 }: {
   email: string;
-  resendKeyConfigured: boolean;
   initialWatches: ClientWatch[];
   isAdmin: boolean;
   adminUsers: AdminUser[] | null;
 }) {
   const router = useRouter();
   const [watches, setWatches] = useState<ClientWatch[]>(initialWatches);
-  const [keyConfigured, setKeyConfigured] = useState(initialResendKey);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   async function cancelWatch(id: string) {
@@ -140,11 +137,6 @@ export function DashboardClient({
             </table>
           </div>
         )}
-      </section>
-
-      <section style={{ marginBottom: 32 }}>
-        <h2 style={sectionTitle}>Notification settings</h2>
-        <ResendKeySection initial={keyConfigured} onChange={setKeyConfigured} />
       </section>
 
       {isAdmin && adminUsers && (
@@ -292,64 +284,6 @@ function WatchRow({
         )}
       </td>
     </tr>
-  );
-}
-
-function ResendKeySection({ initial, onChange }: { initial: boolean; onChange: (v: boolean) => void }) {
-  const [key, setKey] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [info, setInfo] = useState<string | null>(null);
-
-  async function save() {
-    if (!key.trim()) return;
-    setSaving(true);
-    const res = await fetch("/api/user/resend-key", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key: key.trim() }),
-    });
-    setSaving(false);
-    if (res.ok) {
-      onChange(true);
-      setKey("");
-      setInfo("Saved.");
-    } else {
-      setInfo("Save failed.");
-    }
-  }
-
-  async function clear() {
-    setSaving(true);
-    const res = await fetch("/api/user/resend-key", { method: "DELETE" });
-    setSaving(false);
-    if (res.ok) {
-      onChange(false);
-      setInfo("Cleared.");
-    }
-  }
-
-  return (
-    <div style={{ ...cardStyle, marginTop: 24 }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>Resend API key (optional)</div>
-      <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>
-        Set your own Resend key to send alerts from your domain. Leave blank to use the shared system key.
-        {" "}Status: {initial ? <span style={{ color: "var(--success)" }}>configured ✓</span> : "not set"}
-      </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <input
-          type="password"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-          placeholder="re_..."
-          style={{ ...inputStyle, flex: 1, minWidth: 240 }}
-        />
-        <button type="button" onClick={save} disabled={saving || !key.trim()} style={buttonStyle}>Save</button>
-        {initial && (
-          <button type="button" onClick={clear} disabled={saving} style={buttonGhostStyle}>Clear</button>
-        )}
-      </div>
-      {info && <div style={{ marginTop: 12, fontSize: 13, color: "var(--muted)" }}>{info}</div>}
-    </div>
   );
 }
 

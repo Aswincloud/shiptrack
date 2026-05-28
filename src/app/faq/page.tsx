@@ -1,0 +1,148 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { PolicyLayout, pStyle } from "../components/PolicyLayout";
+
+export const metadata: Metadata = {
+  title: "FAQ — ShipTrack",
+};
+
+const QA: { q: string; a: React.ReactNode }[] = [
+  {
+    q: "What is ShipTrack?",
+    a: (
+      <>
+        A free, open-source tracker for Indian and international couriers.
+        Today it supports Blue Dart; more carriers will follow.
+      </>
+    ),
+  },
+  {
+    q: "How much does it cost?",
+    a: <>Nothing. There are no plans, ads, or tracking pixels.</>,
+  },
+  {
+    q: "How often is my shipment checked?",
+    a: (
+      <>
+        You pick. The default is every 15 minutes, but each watch can be set
+        anywhere from 15 minutes to 12 hours. Slower intervals are kinder to
+        the carrier&apos;s site and just as accurate for non-urgent packages.
+      </>
+    ),
+  },
+  {
+    q: "Can I get notifications without creating an account?",
+    a: (
+      <>
+        You can <em>view</em> a tracking status without signing up. To save a
+        watch and get email alerts, an account is needed so we can attach the
+        watch to a verified email address.
+      </>
+    ),
+  },
+  {
+    q: "Is my password safe?",
+    a: (
+      <>
+        We store a PBKDF2-SHA256 hash with a per-account random salt (100,000
+        iterations — the maximum the Cloudflare Workers runtime allows). We
+        never see your raw password. Use a password manager.
+      </>
+    ),
+  },
+  {
+    q: "What happens to a watch after the package is delivered?",
+    a: (
+      <>
+        The watch is automatically marked terminal (delivered / returned) and
+        we stop polling. You can leave it in your dashboard for reference or
+        cancel it.
+      </>
+    ),
+  },
+  {
+    q: "How do I stop getting alerts?",
+    a: (
+      <>
+        Every alert email has a one-click unsubscribe link. You can also
+        cancel a watch from the dashboard, or delete your account by emailing{" "}
+        <a href="mailto:aswin@aswincloud.com">aswin@aswincloud.com</a>.
+      </>
+    ),
+  },
+  {
+    q: "Where does the tracking data come from?",
+    a: (
+      <>
+        For Blue Dart we fetch the public tracking page at{" "}
+        <code>bluedart.com</code>. We don&apos;t use any paid aggregator or
+        scraping service.
+      </>
+    ),
+  },
+  {
+    q: "Can I add another carrier?",
+    a: (
+      <>
+        Yes — the carrier system is pluggable. Open an issue or PR on{" "}
+        <a href="https://github.com/Aswincloud/shiptrack">GitHub</a> with the
+        carrier name and a public tracking-page URL.
+      </>
+    ),
+  },
+  {
+    q: "Can I self-host my own copy?",
+    a: (
+      <>
+        Absolutely. The code is MIT-licensed and runs on Cloudflare Workers +
+        D1 + Resend. See the{" "}
+        <a href="https://github.com/Aswincloud/shiptrack#readme">README</a>{" "}
+        for setup.
+      </>
+    ),
+  },
+];
+
+export default function FaqPage() {
+  return (
+    <PolicyLayout title="FAQ" subtitle="Common questions about ShipTrack.">
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {QA.map((item, i) => (
+          <details
+            key={i}
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+              borderRadius: 12,
+              padding: "16px 20px",
+              marginBottom: 8,
+              boxShadow: "var(--shadow-sm)",
+            }}
+          >
+            <summary
+              style={{
+                fontWeight: 600,
+                cursor: "pointer",
+                color: "var(--fg)",
+                fontSize: 15,
+                listStyle: "none",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <span>{item.q}</span>
+              <span aria-hidden style={{ color: "var(--muted)", fontSize: 18 }}>+</span>
+            </summary>
+            <div style={{ marginTop: 12, color: "var(--fg-soft)" }}>{item.a}</div>
+          </details>
+        ))}
+      </div>
+
+      <p style={{ ...pStyle, marginTop: 32, color: "var(--muted)", fontSize: 13 }}>
+        <Link href="/">← Back to ShipTrack</Link>
+      </p>
+    </PolicyLayout>
+  );
+}
