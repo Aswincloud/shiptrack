@@ -99,14 +99,15 @@ export const bluedart: Carrier = {
 
     const html = await res.text();
 
-    // Public page returns 200 even for unknown AWBs; detect via the body.
-    if (/Records Not Found|no information on the Waybill/i.test(html)) {
+    // The page always returns 200; existence is signalled by an
+    // `id="{awb}-rdrmv"` result panel. The "no information on the Waybill"
+    // copy lives inside a hidden div on every page, so don't use it.
+    const panelRe = new RegExp(`id="${cleaned}-rdrmv"[\\s\\S]*?(?=<!--\\s*AWB${cleaned}\\s*-->|$)`, "i");
+    const panelMatch = html.match(panelRe);
+    if (!panelMatch || /Records Not Found/i.test(html)) {
       throw new CarrierError("Tracking number not found", "not_found", 404);
     }
-
-    // Scope to the result panel for this AWB if present (defensive against future multi-AWB pages).
-    const panelRe = new RegExp(`id="${cleaned}-rdrmv"[\\s\\S]*?(?=<!--\\s*AWB${cleaned}\\s*-->|$)`, "i");
-    const panel = html.match(panelRe)?.[0] ?? html;
+    const panel = panelMatch[0];
 
     const status = fieldByLabel(panel, "Status");
     const expectedDelivery = fieldByLabel(panel, "Expected Date of Delivery");
