@@ -271,7 +271,6 @@ function AdminSection({
   currentUserId: string | undefined;
 }) {
   const [users, setUsers] = useState<AdminUser[]>(initialUsers);
-  const [open, setOpen] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -281,6 +280,22 @@ function AdminSection({
     if (res.ok) {
       const body = await res.json();
       setUsers(body.users);
+    }
+  }
+
+  async function deleteUser(u: AdminUser) {
+    if (!confirm(`Delete account ${u.email}? This cancels all their watches and emails them a notice.`)) return;
+    setError(null);
+    setInfo(null);
+    setActingId(u.id);
+    const res = await fetch(`/api/admin/users/${encodeURIComponent(u.id)}`, { method: "DELETE" });
+    setActingId(null);
+    if (res.ok) {
+      setInfo(`Deleted ${u.email}. Notice sent.`);
+      setUsers((us) => us.filter((x) => x.id !== u.id));
+    } else {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error === "cannot_delete_self" ? "You can't delete your own admin account." : "Delete failed.");
     }
   }
 
@@ -335,98 +350,77 @@ function AdminSection({
   }
 
   return (
-    <div style={{ ...cardStyle, marginTop: 24 }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          background: "transparent",
-          color: "var(--fg)",
-          border: "none",
-          padding: 0,
-          fontSize: 16,
-          fontWeight: 600,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-        }}
-      >
-        <span style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>▸</span>
-        Admin · all users ({users.length})
-      </button>
-
-      {open && (
-        <>
-          <div style={{ color: "var(--muted)", fontSize: 13, margin: "8px 0 16px" }}>
-            Visible to administrators only.
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead>
-                <tr style={{ color: "var(--muted)", fontSize: 12, textAlign: "left" }}>
-                  <th style={th}>Email</th>
-                  <th style={th}>Verified</th>
-                  <th style={th}>Watches</th>
-                  <th style={th}>Created</th>
-                  <th style={th}></th>
+    <div style={{ marginTop: 32 }}>
+      <h2 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 12px" }}>Users ({users.length})</h2>
+      <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <thead>
+              <tr style={{ color: "var(--muted)", fontSize: 12, textAlign: "left" }}>
+                <th style={th}>Email</th>
+                <th style={th}>Verified</th>
+                <th style={th}>Watches</th>
+                <th style={th}>Created</th>
+                <th style={th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td style={td}>{u.email}</td>
+                  <td style={td}>
+                    {u.email_verified === 1 ? (
+                      <span style={{ color: "#7cd992" }}>✓</span>
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>—</span>
+                    )}
+                  </td>
+                  <td style={td}>{u.watch_count}</td>
+                  <td style={{ ...td, color: "var(--muted)", fontSize: 12 }}>
+                    {new Date(u.created_at * 1000).toLocaleDateString()}
+                  </td>
+                  <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => forceReset(u)}
+                      disabled={actingId === u.id}
+                      style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, marginRight: 4 }}
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => editEmail(u)}
+                      disabled={actingId === u.id}
+                      style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, marginRight: 4 }}
+                    >
+                      Edit email
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => emailUser(u)}
+                      disabled={actingId === u.id}
+                      style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, marginRight: 4 }}
+                    >
+                      Email
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteUser(u)}
+                      disabled={actingId === u.id}
+                      style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, color: "#ff9b9b", borderColor: "#5a2a2a" }}
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id}>
-                    <td style={td}>
-                      {u.email}{" "}
-                      {u.is_admin === 1 && (
-                        <span style={{ color: "var(--accent)", fontSize: 11, marginLeft: 4 }}>admin</span>
-                      )}
-                    </td>
-                    <td style={td}>
-                      {u.email_verified === 1 ? (
-                        <span style={{ color: "#7cd992" }}>✓</span>
-                      ) : (
-                        <span style={{ color: "var(--muted)" }}>—</span>
-                      )}
-                    </td>
-                    <td style={td}>{u.watch_count}</td>
-                    <td style={{ ...td, color: "var(--muted)", fontSize: 12 }}>
-                      {new Date(u.created_at * 1000).toLocaleDateString()}
-                    </td>
-                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
-                      <button
-                        type="button"
-                        onClick={() => forceReset(u)}
-                        disabled={actingId === u.id}
-                        style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, marginRight: 4 }}
-                      >
-                        Reset
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => editEmail(u)}
-                        disabled={actingId === u.id}
-                        style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, marginRight: 4 }}
-                      >
-                        Edit email
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => emailUser(u)}
-                        disabled={actingId === u.id}
-                        style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12 }}
-                      >
-                        Email
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {info && <div style={{ marginTop: 12, fontSize: 13, color: "#7cd992" }}>{info}</div>}
-          {error && <div style={{ marginTop: 12, fontSize: 13, color: "#ff9b9b" }}>{error}</div>}
-        </>
-      )}
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {info && <div style={{ marginTop: 12, fontSize: 13, color: "#7cd992" }}>{info}</div>}
+      {error && <div style={{ marginTop: 12, fontSize: 13, color: "#ff9b9b" }}>{error}</div>}
     </div>
   );
 }

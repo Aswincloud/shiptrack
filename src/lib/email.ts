@@ -109,6 +109,37 @@ export function otpEmail(args: {
   return { subject, html, text };
 }
 
+export function accountDeletedEmail(args: {
+  appUrl: string;
+}): { subject: string; html: string; text: string } {
+  const subject = "Your ShipTrack account was deleted";
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;padding:24px;color:#111">
+      <h2 style="margin:0 0 12px">Your account was deleted</h2>
+      <p>An administrator removed your ShipTrack account. All watches tied to it have been cancelled and no further alerts will be sent.</p>
+      <p style="color:#666;font-size:13px">If you think this was a mistake, you can sign up again at <a href="${args.appUrl}">${args.appUrl}</a>.</p>
+    </div>
+  `;
+  const text = `Your ShipTrack account was deleted by an admin. All watches were cancelled. Sign up again at ${args.appUrl} if needed.`;
+  return { subject, html, text };
+}
+
+export function newSignupAdminEmail(args: {
+  newUserEmail: string;
+  appUrl: string;
+}): { subject: string; html: string; text: string } {
+  const subject = `New ShipTrack signup: ${args.newUserEmail}`;
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;padding:24px;color:#111">
+      <h2 style="margin:0 0 12px">New user signed up</h2>
+      <p><strong>${escapeHtml(args.newUserEmail)}</strong> just started the signup flow.</p>
+      <p style="color:#666;font-size:13px">They&apos;re unverified until they enter the OTP we sent them. <a href="${args.appUrl}/dashboard">Open the admin dashboard</a>.</p>
+    </div>
+  `;
+  const text = `New ShipTrack signup: ${args.newUserEmail}. Open ${args.appUrl}/dashboard.`;
+  return { subject, html, text };
+}
+
 export function passwordResetEmail(args: {
   resetUrl: string;
   ttlHours: number;

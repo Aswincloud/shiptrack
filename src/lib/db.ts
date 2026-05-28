@@ -276,6 +276,18 @@ export async function updateUserEmail(
   return { ok: true };
 }
 
+export async function deleteUser(db: D1Database, userId: string): Promise<void> {
+  // Watches cascade via the user_id FK; events cascade off watches.
+  await db.prepare(`DELETE FROM users WHERE id = ?`).bind(userId).run();
+}
+
+export async function listAdminEmails(db: D1Database): Promise<string[]> {
+  const res = await db
+    .prepare(`SELECT email FROM users WHERE is_admin = 1 AND email_verified = 1`)
+    .all<{ email: string }>();
+  return (res.results ?? []).map((r) => r.email);
+}
+
 export async function listAllUsersForAdmin(db: D1Database): Promise<AdminUserView[]> {
   const res = await db
     .prepare(

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { createUser, getUserByEmail, upsertOtp } from "@/lib/db";
+import { createUser, getUserByEmail, upsertOtp, listAdminEmails } from "@/lib/db";
 import { hashPassword } from "@/lib/passwords";
 import { generateOtp, hashOtp, OTP_TTL_SECONDS } from "@/lib/otp";
-import { sendEmail, otpEmail } from "@/lib/email";
+import { sendEmail, otpEmail, newSignupAdminEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +54,25 @@ export async function POST(req: NextRequest) {
     { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
     { to: email, ...tpl },
   );
+
+  // Best-effort admin notification (only for genuinely new accounts, not
+  // re-attempts on an existing unverified row).
+  if (!existing) {
+    try {
+      const admins = await listAdminEmails(env.DB);
+      const adminTpl = newSignupAdminEmail({ newUserEmail: email, appUrl: env.APP_URL });
+      await Promise.all(
+        admins.map((to) =>
+          sendEmail(
+            { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
+            { to, ...adminTpl },
+          ).catch((err) => console.warn(`admin notify failed for ${to}:`, err)),
+        ),
+      );
+    } catch (err) {
+      console.warn("admin signup notify failed:", err instanceof Error ? err.message : err);
+    }
+  }
 
   return NextResponse.json({ status: "pending_verification" }, { status: 202 });
 }
