@@ -321,6 +321,39 @@ export async function listAllUsersForAdmin(db: D1Database): Promise<AdminUserVie
   return res.results ?? [];
 }
 
+export async function getUserByOAuthIdentity(
+  db: D1Database,
+  provider: string,
+  providerUserId: string,
+): Promise<UserRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT u.* FROM users u
+       INNER JOIN oauth_identities o ON o.user_id = u.id
+       WHERE o.provider = ? AND o.provider_user_id = ?`,
+    )
+    .bind(provider, providerUserId)
+    .first<UserRow>();
+  return row ?? null;
+}
+
+export async function linkOAuthIdentity(
+  db: D1Database,
+  args: { provider: string; providerUserId: string; userId: string; email?: string | null },
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO oauth_identities (provider, provider_user_id, user_id, email, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(provider, provider_user_id) DO UPDATE SET
+         user_id = excluded.user_id,
+         email = excluded.email`,
+    )
+    .bind(args.provider, args.providerUserId, args.userId, args.email ?? null, now)
+    .run();
+}
+
 // --- OTP ---
 
 export async function upsertOtp(

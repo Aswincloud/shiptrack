@@ -1,4 +1,4 @@
-export type TokenPurpose = "confirm" | "unsubscribe" | "session" | "password_reset";
+export type TokenPurpose = "confirm" | "unsubscribe" | "session" | "password_reset" | "oauth_state";
 
 // Payload uses a single subject field `s`. Older tokens (issued before this
 // refactor) used `w` for watchId — kept as a fallback in verifyToken so

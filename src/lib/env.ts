@@ -8,6 +8,13 @@ export interface AppEnv {
   RESEND_FROM: string;
   APP_URL: string;
   ADMIN_TOKEN?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  MICROSOFT_CLIENT_ID?: string;
+  MICROSOFT_CLIENT_SECRET?: string;
+  MICROSOFT_TENANT_ID?: string;
 }
 
 export function getEnv(): AppEnv {

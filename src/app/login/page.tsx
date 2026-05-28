@@ -1,16 +1,23 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { inputStyle, buttonStyle, cardStyle, pageWrapStyle } from "../styles";
+import { SsoButtons } from "../components/SsoButtons";
 
-export default function LoginPage() {
+function LoginInner() {
   const router = useRouter();
+  const params = useSearchParams();
+  const oauthError = params.get("oauth_error");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    oauthError
+      ? `Sign-in via the provider didn't complete (${oauthError.replace(/_/g, " ")}). Try again or use email + password.`
+      : null,
+  );
 
   async function handle(e: React.FormEvent) {
     e.preventDefault();
@@ -46,6 +53,7 @@ export default function LoginPage() {
     <main style={pageWrapStyle}>
       <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>Welcome back</h1>
       <p style={{ color: "var(--muted)", margin: "0 0 28px", fontSize: 15 }}>Sign in to manage your shipment alerts.</p>
+      <SsoButtons verb="Sign in" />
       <form onSubmit={handle} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
         <label style={labelStyle}>
           Email
@@ -79,6 +87,14 @@ export default function LoginPage() {
         <Link href="/forgot">Forgot password?</Link>
       </p>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginInner />
+    </Suspense>
   );
 }
 

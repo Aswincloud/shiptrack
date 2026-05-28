@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { inputStyle, buttonStyle, cardStyle, pageWrapStyle } from "../styles";
+import { SsoButtons } from "../components/SsoButtons";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -41,6 +42,7 @@ export default function SignupPage() {
       <p style={{ color: "var(--muted)", margin: "0 0 28px", fontSize: 15 }}>
         Sign up to track shipments and get alerts.
       </p>
+      <SsoButtons verb="Sign up" />
       <form onSubmit={handle} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
         <label style={labelStyle}>
           Email
