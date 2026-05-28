@@ -95,6 +95,8 @@ export default function Home() {
               ))}
             </ol>
           </div>
+
+          <NotifyForm carrier={carrier} trackingNumber={result.trackingNumber} />
         </>
       )}
 
@@ -102,6 +104,100 @@ export default function Home() {
         <a href="https://github.com/aswin/shiptrack">Source on GitHub</a> · MIT licensed
       </footer>
     </main>
+  );
+}
+
+function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumber: string }) {
+  const [email, setEmail] = useState("");
+  const [label, setLabel] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+
+  async function handle(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim()) return;
+    setSubmitting(true);
+    setStatus(null);
+
+    let token = typeof window !== "undefined" ? window.localStorage.getItem("shiptrack_admin_token") : "";
+    if (!token) {
+      token = typeof window !== "undefined" ? window.prompt("Admin token") : null;
+      if (!token) {
+        setSubmitting(false);
+        return;
+      }
+      window.localStorage.setItem("shiptrack_admin_token", token);
+    }
+
+    try {
+      const res = await fetch("/api/watches", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          carrier,
+          trackingNumber,
+          label: label.trim() || undefined,
+        }),
+      });
+      const body = await res.json();
+      if (res.status === 401) {
+        window.localStorage.removeItem("shiptrack_admin_token");
+        setStatus({ kind: "err", msg: "Invalid admin token. Try again." });
+      } else if (!res.ok) {
+        setStatus({ kind: "err", msg: body.message ?? body.error ?? "Failed to register watch" });
+      } else {
+        setStatus({ kind: "ok", msg: `Watching this shipment. You'll get an email at ${email} on status changes.` });
+        setEmail("");
+        setLabel("");
+      }
+    } catch (err) {
+      setStatus({ kind: "err", msg: err instanceof Error ? err.message : "Network error" });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginTop: 16 }}>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Notify me on changes</div>
+      <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>
+        We&apos;ll email you every time the status updates. Unsubscribe in one click.
+      </div>
+      <form onSubmit={handle} style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="you@example.com"
+          required
+          style={{ ...inputStyle, flex: 2, minWidth: 200 }}
+        />
+        <input
+          value={label}
+          onChange={(e) => setLabel(e.target.value)}
+          placeholder="Label (optional)"
+          style={{ ...inputStyle, flex: 1, minWidth: 140 }}
+        />
+        <button type="submit" disabled={submitting || !email.trim()} style={buttonStyle}>
+          {submitting ? "Saving…" : "Notify me"}
+        </button>
+      </form>
+      {status && (
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 13,
+            color: status.kind === "ok" ? "#7cd992" : "#ff9b9b",
+          }}
+        >
+          {status.msg}
+        </div>
+      )}
+    </div>
   );
 }
 
