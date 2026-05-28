@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import { getEnvAsync } from "@/lib/env";
 import { readSessionFromCookies } from "@/lib/auth";
 import "./globals.css";
+
+const CHATWOOT_BASE_URL = "https://support.aswincloud.com";
+const CHATWOOT_WEBSITE_TOKEN = "A2f18JGY7uLahTifqxi74Ncd";
 
 export const dynamic = "force-dynamic";
 
@@ -143,6 +147,23 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           </div>
         </nav>
         {children}
+
+        <Script id="chatwoot-settings" strategy="afterInteractive">
+          {`window.chatwootSettings = { position: "right", type: "standard", launcherTitle: "Chat with us" };`}
+        </Script>
+        <Script
+          id="chatwoot-sdk"
+          strategy="afterInteractive"
+          src={`${CHATWOOT_BASE_URL}/packs/js/sdk.js`}
+        />
+        <Script id="chatwoot-init" strategy="afterInteractive">
+          {`
+            (function init() {
+              if (!window.chatwootSDK) { setTimeout(init, 100); return; }
+              window.chatwootSDK.run({ websiteToken: "${CHATWOOT_WEBSITE_TOKEN}", baseUrl: "${CHATWOOT_BASE_URL}" });
+            })();
+          `}
+        </Script>
       </body>
     </html>
   );
