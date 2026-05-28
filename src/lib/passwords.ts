@@ -1,8 +1,9 @@
 // PBKDF2-SHA256 password hashing. Stored format:
 //   pbkdf2$<iterations>$<salt_b64>$<hash_b64>
-// All base64url (no padding). 200k iterations, 16-byte salt, 32-byte hash.
+// All base64url (no padding). 100k iterations (Cloudflare Workers caps
+// PBKDF2 at 100k), 16-byte salt, 32-byte hash.
 
-const ITERATIONS = 200_000;
+const ITERATIONS = 100_000;
 const SALT_BYTES = 16;
 const HASH_BYTES = 32;
 
