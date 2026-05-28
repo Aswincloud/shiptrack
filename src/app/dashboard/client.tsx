@@ -16,14 +16,27 @@ interface ClientWatch {
   createdAt: number;
 }
 
+interface AdminUser {
+  id: string;
+  email: string;
+  email_verified: number;
+  is_admin: number;
+  created_at: number;
+  watch_count: number;
+}
+
 export function DashboardClient({
   email,
   resendKeyConfigured: initialResendKey,
   initialWatches,
+  isAdmin,
+  adminUsers,
 }: {
   email: string;
   resendKeyConfigured: boolean;
   initialWatches: ClientWatch[];
+  isAdmin: boolean;
+  adminUsers: AdminUser[] | null;
 }) {
   const router = useRouter();
   const [watches, setWatches] = useState<ClientWatch[]>(initialWatches);
@@ -89,6 +102,8 @@ export function DashboardClient({
       )}
 
       <ResendKeySection initial={keyConfigured} onChange={setKeyConfigured} />
+
+      {isAdmin && adminUsers && <AdminSection initialUsers={adminUsers} currentUserId={undefined} />}
 
       <div style={{ marginTop: 32, color: "var(--muted)", fontSize: 13 }}>
         <button
@@ -244,6 +259,174 @@ function ResendKeySection({ initial, onChange }: { initial: boolean; onChange: (
         )}
       </div>
       {info && <div style={{ marginTop: 12, fontSize: 13, color: "var(--muted)" }}>{info}</div>}
+    </div>
+  );
+}
+
+function AdminSection({
+  initialUsers,
+  currentUserId: _currentUserId,
+}: {
+  initialUsers: AdminUser[];
+  currentUserId: string | undefined;
+}) {
+  const [users, setUsers] = useState<AdminUser[]>(initialUsers);
+  const [open, setOpen] = useState(false);
+  const [actingId, setActingId] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function refresh() {
+    const res = await fetch("/api/admin/users");
+    if (res.ok) {
+      const body = await res.json();
+      setUsers(body.users);
+    }
+  }
+
+  async function forceReset(u: AdminUser) {
+    if (!confirm(`Send a password reset link to ${u.email}?`)) return;
+    setError(null);
+    setInfo(null);
+    setActingId(u.id);
+    const res = await fetch(`/api/admin/users/${encodeURIComponent(u.id)}/force-reset`, { method: "POST" });
+    setActingId(null);
+    if (res.ok) setInfo(`Reset link sent to ${u.email}.`);
+    else setError(`Couldn't send reset link to ${u.email}.`);
+  }
+
+  async function editEmail(u: AdminUser) {
+    const next = window.prompt(`New email for ${u.email}:`, u.email);
+    if (!next || next === u.email) return;
+    setError(null);
+    setInfo(null);
+    setActingId(u.id);
+    const res = await fetch(`/api/admin/users/${encodeURIComponent(u.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: next }),
+    });
+    setActingId(null);
+    if (res.ok) {
+      setInfo(`Email updated to ${next}.`);
+      await refresh();
+    } else {
+      const body = await res.json().catch(() => ({}));
+      setError(body.error === "email_in_use" ? "That email is already used by another account." : "Update failed.");
+    }
+  }
+
+  async function emailUser(u: AdminUser) {
+    const subject = window.prompt(`Subject for email to ${u.email}:`);
+    if (!subject) return;
+    const message = window.prompt(`Message body:`);
+    if (!message) return;
+    setError(null);
+    setInfo(null);
+    setActingId(u.id);
+    const res = await fetch(`/api/admin/users/${encodeURIComponent(u.id)}/email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject, message }),
+    });
+    setActingId(null);
+    if (res.ok) setInfo(`Email sent to ${u.email}.`);
+    else setError(`Couldn't send email to ${u.email}.`);
+  }
+
+  return (
+    <div style={{ ...cardStyle, marginTop: 24 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          background: "transparent",
+          color: "var(--fg)",
+          border: "none",
+          padding: 0,
+          fontSize: 16,
+          fontWeight: 600,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        <span style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>▸</span>
+        Admin · all users ({users.length})
+      </button>
+
+      {open && (
+        <>
+          <div style={{ color: "var(--muted)", fontSize: 13, margin: "8px 0 16px" }}>
+            Visible to administrators only.
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <thead>
+                <tr style={{ color: "var(--muted)", fontSize: 12, textAlign: "left" }}>
+                  <th style={th}>Email</th>
+                  <th style={th}>Verified</th>
+                  <th style={th}>Watches</th>
+                  <th style={th}>Created</th>
+                  <th style={th}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id}>
+                    <td style={td}>
+                      {u.email}{" "}
+                      {u.is_admin === 1 && (
+                        <span style={{ color: "var(--accent)", fontSize: 11, marginLeft: 4 }}>admin</span>
+                      )}
+                    </td>
+                    <td style={td}>
+                      {u.email_verified === 1 ? (
+                        <span style={{ color: "#7cd992" }}>✓</span>
+                      ) : (
+                        <span style={{ color: "var(--muted)" }}>—</span>
+                      )}
+                    </td>
+                    <td style={td}>{u.watch_count}</td>
+                    <td style={{ ...td, color: "var(--muted)", fontSize: 12 }}>
+                      {new Date(u.created_at * 1000).toLocaleDateString()}
+                    </td>
+                    <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => forceReset(u)}
+                        disabled={actingId === u.id}
+                        style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, marginRight: 4 }}
+                      >
+                        Reset
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => editEmail(u)}
+                        disabled={actingId === u.id}
+                        style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, marginRight: 4 }}
+                      >
+                        Edit email
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => emailUser(u)}
+                        disabled={actingId === u.id}
+                        style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12 }}
+                      >
+                        Email
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {info && <div style={{ marginTop: 12, fontSize: 13, color: "#7cd992" }}>{info}</div>}
+          {error && <div style={{ marginTop: 12, fontSize: 13, color: "#ff9b9b" }}>{error}</div>}
+        </>
+      )}
     </div>
   );
 }

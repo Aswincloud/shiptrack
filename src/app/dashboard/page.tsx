@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
 import { readSessionFromCookies } from "@/lib/auth";
-import { getUserById, listWatchesByUser, type WatchRow } from "@/lib/db";
+import { getUserById, listWatchesByUser, listAllUsersForAdmin, type WatchRow } from "@/lib/db";
 import { DashboardClient } from "./client";
 
 export const dynamic = "force-dynamic";
@@ -19,12 +19,16 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const watches = await listWatchesByUser(env.DB, sess.userId);
+  const isAdmin = user.is_admin === 1;
+  const adminUsers = isAdmin ? await listAllUsersForAdmin(env.DB) : null;
 
   return (
     <DashboardClient
       email={user.email}
       resendKeyConfigured={!!user.resend_api_key}
       initialWatches={watches.map(serializeWatch)}
+      isAdmin={isAdmin}
+      adminUsers={adminUsers}
     />
   );
 }

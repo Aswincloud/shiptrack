@@ -22,6 +22,16 @@ export interface UserRow {
   email_verified: number;
   resend_api_key: string | null;
   created_at: number;
+  is_admin: number;
+}
+
+export interface AdminUserView {
+  id: string;
+  email: string;
+  email_verified: number;
+  is_admin: number;
+  created_at: number;
+  watch_count: number;
 }
 
 export interface OtpRow {
@@ -248,6 +258,36 @@ export async function updateUserResendKey(
     .prepare(`UPDATE users SET resend_api_key = ? WHERE id = ?`)
     .bind(key, userId)
     .run();
+}
+
+export async function updateUserEmail(
+  db: D1Database,
+  userId: string,
+  newEmail: string,
+): Promise<{ ok: boolean; conflict?: boolean }> {
+  // Check for an existing user with this email first to give a friendly error
+  // instead of a raw UNIQUE constraint failure.
+  const existing = await db
+    .prepare(`SELECT id FROM users WHERE email = ? AND id != ?`)
+    .bind(newEmail, userId)
+    .first<{ id: string }>();
+  if (existing) return { ok: false, conflict: true };
+  await db.prepare(`UPDATE users SET email = ? WHERE id = ?`).bind(newEmail, userId).run();
+  return { ok: true };
+}
+
+export async function listAllUsersForAdmin(db: D1Database): Promise<AdminUserView[]> {
+  const res = await db
+    .prepare(
+      `SELECT u.id, u.email, u.email_verified, u.is_admin, u.created_at,
+              COALESCE(COUNT(w.id), 0) AS watch_count
+       FROM users u
+       LEFT JOIN watches w ON w.user_id = u.id AND w.status != 'cancelled'
+       GROUP BY u.id
+       ORDER BY u.created_at DESC`,
+    )
+    .all<AdminUserView>();
+  return res.results ?? [];
 }
 
 // --- OTP ---

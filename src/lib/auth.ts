@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import type { D1Database } from "@cloudflare/workers-types";
 import { signToken, verifyToken } from "./tokens";
+import { getUserById } from "./db";
 
 export const SESSION_COOKIE_NAME = "shiptrack_session";
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -38,6 +40,22 @@ export async function requireSession(secret: string, req: NextRequest): Promise<
   const sess = await readSession(secret, req);
   if (!sess) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   return sess;
+}
+
+// Returns the admin user when the request has a valid session and the user
+// is_admin=1. Otherwise returns a NextResponse to return immediately.
+export async function requireAdmin(
+  secret: string,
+  db: D1Database,
+  req: NextRequest,
+): Promise<{ userId: string } | NextResponse> {
+  const sess = await readSession(secret, req);
+  if (!sess) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const user = await getUserById(db, sess.userId);
+  if (!user || user.is_admin !== 1) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  return { userId: user.id };
 }
 
 function cookieHeader(value: string, maxAgeSeconds: number): string {
