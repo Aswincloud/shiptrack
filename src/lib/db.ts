@@ -13,6 +13,7 @@ export interface WatchRow {
   last_polled_at: number | null;
   created_at: number;
   confirmed_at: number | null;
+  poll_interval_seconds: number;
 }
 
 export interface UserRow {
@@ -49,16 +50,22 @@ export interface NewWatch {
   trackingNumber: string;
   label?: string | null;
   userId?: string | null;
+  pollIntervalSeconds?: number;
 }
+
+export const DEFAULT_POLL_INTERVAL_SECONDS = 840;
+export const MIN_POLL_INTERVAL_SECONDS = 15 * 60;
+export const MAX_POLL_INTERVAL_SECONDS = 12 * 60 * 60;
 
 export async function createWatch(db: D1Database, w: NewWatch): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
+  const interval = w.pollIntervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS;
   await db
     .prepare(
-      `INSERT INTO watches (id, user_id, email, carrier, tracking_number, label, status, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      `INSERT INTO watches (id, user_id, email, carrier, tracking_number, label, status, created_at, poll_interval_seconds)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
     )
-    .bind(w.id, w.userId ?? null, w.email, w.carrier, w.trackingNumber, w.label ?? null, now)
+    .bind(w.id, w.userId ?? null, w.email, w.carrier, w.trackingNumber, w.label ?? null, now, interval)
     .run();
 }
 
@@ -120,10 +127,10 @@ export async function updateWatchForUser(
   db: D1Database,
   id: string,
   userId: string,
-  patch: { label?: string | null; email?: string },
+  patch: { label?: string | null; email?: string; pollIntervalSeconds?: number },
 ): Promise<boolean> {
   const fields: string[] = [];
-  const values: (string | null)[] = [];
+  const values: (string | number | null)[] = [];
   if (patch.label !== undefined) {
     fields.push("label = ?");
     values.push(patch.label);
@@ -131,6 +138,10 @@ export async function updateWatchForUser(
   if (patch.email !== undefined) {
     fields.push("email = ?");
     values.push(patch.email);
+  }
+  if (patch.pollIntervalSeconds !== undefined) {
+    fields.push("poll_interval_seconds = ?");
+    values.push(patch.pollIntervalSeconds);
   }
   if (fields.length === 0) return false;
   values.push(id, userId);
@@ -144,18 +155,19 @@ export async function updateWatchForUser(
 export async function listDueWatches(
   db: D1Database,
   now: number,
-  intervalSeconds: number,
   batchSize: number,
 ): Promise<WatchRow[]> {
-  const cutoff = now - intervalSeconds;
+  // A watch is due when it's been longer than its own poll_interval_seconds
+  // since the last poll. Never-polled rows fire immediately.
   const res = await db
     .prepare(
       `SELECT * FROM watches
-       WHERE status='active' AND (last_polled_at IS NULL OR last_polled_at < ?)
+       WHERE status='active'
+         AND (last_polled_at IS NULL OR (? - last_polled_at) >= poll_interval_seconds)
        ORDER BY last_polled_at ASC NULLS FIRST
        LIMIT ?`,
     )
-    .bind(cutoff, batchSize)
+    .bind(now, batchSize)
     .all<WatchRow>();
   return res.results ?? [];
 }

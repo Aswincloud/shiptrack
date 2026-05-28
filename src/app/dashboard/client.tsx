@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, statusPillStyle } from "../styles";
+import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, statusPillStyle, intervalLabel } from "../styles";
+import { IntervalPicker } from "../components/IntervalPicker";
 
 interface ClientWatch {
   id: string;
@@ -14,6 +15,7 @@ interface ClientWatch {
   lastKnownStatus: string | null;
   lastPolledAt: number | null;
   createdAt: number;
+  pollIntervalSeconds: number;
 }
 
 interface AdminUser {
@@ -114,6 +116,7 @@ export function DashboardClient({
                   <th style={th}>Label</th>
                   <th style={th}>Notify email</th>
                   <th style={th}>Status</th>
+                  <th style={th}>Interval</th>
                   <th style={th}>Last poll</th>
                   <th style={th}></th>
                 </tr>
@@ -209,6 +212,7 @@ function WatchRow({
 }) {
   const [label, setLabel] = useState(w.label ?? "");
   const [email, setEmail] = useState(w.email);
+  const [interval, setInterval] = useState<number>(w.pollIntervalSeconds);
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -216,13 +220,14 @@ function WatchRow({
     const body: Record<string, unknown> = {};
     if (label !== (w.label ?? "")) body.label = label || null;
     if (email !== w.email) body.email = email;
+    if (interval !== w.pollIntervalSeconds) body.pollIntervalSeconds = interval;
     const res = await fetch(`/api/watches/${encodeURIComponent(w.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     setSaving(false);
-    if (res.ok) onSave({ label: label || null, email });
+    if (res.ok) onSave({ label: label || null, email, pollIntervalSeconds: interval });
   }
 
   const statusText = w.status === "cancelled" ? "cancelled" : (w.lastKnownStatus ?? w.status).replace(/_/g, " ");
@@ -241,8 +246,14 @@ function WatchRow({
         <td style={td} data-label="Email">
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" style={{ ...inputStyle, padding: "6px 8px", fontSize: 13, flex: 1 }} />
         </td>
-        <td style={td} data-label="Status" colSpan={2}>
+        <td style={td} data-label="Status">
           <em style={{ color: "var(--muted)", fontSize: 12 }}>Editing…</em>
+        </td>
+        <td style={td} data-label="Interval">
+          <IntervalPicker value={interval} onChange={setInterval} />
+        </td>
+        <td style={td} data-label="Last poll">
+          <span style={{ color: "var(--muted)", fontSize: 12 }}>—</span>
         </td>
         <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
           <button type="button" onClick={save} disabled={saving} style={{ ...buttonStyle, padding: "7px 14px", fontSize: 13, marginRight: 4 }}>
@@ -267,6 +278,9 @@ function WatchRow({
       <td style={td} data-label="Email"><span style={{ color: "var(--muted)" }}>{w.email}</span></td>
       <td style={td} data-label="Status">
         <span style={statusPillStyle(pillStatus)}>{statusText}</span>
+      </td>
+      <td style={{ ...td, color: "var(--muted)", fontSize: 12 }} data-label="Interval">
+        {intervalLabel(w.pollIntervalSeconds)}
       </td>
       <td style={{ ...td, color: "var(--muted)", fontSize: 12 }} data-label="Last poll">{polled}</td>
       <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>

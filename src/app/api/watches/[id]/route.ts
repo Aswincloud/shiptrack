@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { cancelWatchForUser, updateWatchForUser } from "@/lib/db";
+import {
+  cancelWatchForUser,
+  updateWatchForUser,
+  MIN_POLL_INTERVAL_SECONDS,
+  MAX_POLL_INTERVAL_SECONDS,
+} from "@/lib/db";
 import { readSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +14,12 @@ export const dynamic = "force-dynamic";
 const PatchBody = z.object({
   label: z.string().max(80).nullable().optional(),
   email: z.string().email().max(254).optional(),
+  pollIntervalSeconds: z
+    .number()
+    .int()
+    .min(MIN_POLL_INTERVAL_SECONDS)
+    .max(MAX_POLL_INTERVAL_SECONDS)
+    .optional(),
 });
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -43,6 +54,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const ok = await updateWatchForUser(env.DB, id, sess.userId, {
     label: parsed.data.label === undefined ? undefined : parsed.data.label,
     email: parsed.data.email === undefined ? undefined : parsed.data.email.toLowerCase(),
+    pollIntervalSeconds: parsed.data.pollIntervalSeconds,
   });
   if (!ok) return NextResponse.json({ error: "not_found" }, { status: 404 });
   return NextResponse.json({ status: "ok" });

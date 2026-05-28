@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { TrackingResult } from "@/carriers/types";
 import { inputStyle, buttonStyle, cardStyle, statusPillStyle } from "./styles";
+import { IntervalPicker } from "./components/IntervalPicker";
+
+const DEFAULT_INTERVAL_SECONDS = 15 * 60;
 
 export default function Home() {
   const [carrier, setCarrier] = useState("bluedart");
@@ -225,6 +228,7 @@ function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumb
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [email, setEmail] = useState("");
   const [label, setLabel] = useState("");
+  const [intervalSeconds, setIntervalSeconds] = useState<number>(DEFAULT_INTERVAL_SECONDS);
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
 
@@ -252,6 +256,7 @@ function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumb
           carrier,
           trackingNumber,
           label: label.trim() || undefined,
+          pollIntervalSeconds: intervalSeconds,
         }),
       });
       const body = await res.json();
@@ -346,24 +351,30 @@ function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumb
           <div style={{ color: "var(--muted)", fontSize: 12 }}>One-click unsubscribe in every email.</div>
         </div>
       </div>
-      <form onSubmit={handle} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          required
-          style={{ ...inputStyle, flex: 2, minWidth: 200 }}
-        />
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="Label (optional)"
-          style={{ ...inputStyle, flex: 1, minWidth: 140 }}
-        />
-        <button type="submit" disabled={submitting || !email.trim()} style={buttonStyle}>
-          {submitting ? "Saving…" : "Notify me"}
-        </button>
+      <form onSubmit={handle} style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            required
+            style={{ ...inputStyle, flex: 2, minWidth: 200 }}
+          />
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="Label (optional)"
+            style={{ ...inputStyle, flex: 1, minWidth: 140 }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ fontSize: 12, color: "var(--muted)", fontWeight: 500 }}>Check</label>
+          <IntervalPicker value={intervalSeconds} onChange={setIntervalSeconds} />
+          <button type="submit" disabled={submitting || !email.trim()} style={{ ...buttonStyle, marginLeft: "auto" }}>
+            {submitting ? "Saving…" : "Notify me"}
+          </button>
+        </div>
       </form>
       {status && (
         <div

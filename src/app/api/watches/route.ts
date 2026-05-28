@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { createWatch, confirmWatch, getUserById } from "@/lib/db";
+import {
+  createWatch,
+  confirmWatch,
+  getUserById,
+  MIN_POLL_INTERVAL_SECONDS,
+  MAX_POLL_INTERVAL_SECONDS,
+} from "@/lib/db";
 import { getCarrier } from "@/carriers/registry";
 import { readSession } from "@/lib/auth";
 import { signToken } from "@/lib/tokens";
@@ -14,6 +20,12 @@ const Body = z.object({
   carrier: z.string().min(1).max(32),
   trackingNumber: z.string().min(4).max(40),
   label: z.string().max(80).optional(),
+  pollIntervalSeconds: z
+    .number()
+    .int()
+    .min(MIN_POLL_INTERVAL_SECONDS)
+    .max(MAX_POLL_INTERVAL_SECONDS)
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -60,6 +72,7 @@ export async function POST(req: NextRequest) {
     carrier: cleanedCarrier,
     trackingNumber: cleanedTracking,
     label: cleanedLabel,
+    pollIntervalSeconds: parsed.data.pollIntervalSeconds,
   });
   await confirmWatch(env.DB, id);
 

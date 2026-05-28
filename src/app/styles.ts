@@ -50,6 +50,28 @@ export const pageWrapStyle: CSSProperties = {
   padding: "64px 20px",
 };
 
+// Preset poll intervals shown in the UI. Custom values are also allowed
+// (15-720 minutes) but these cover most use cases.
+export const INTERVAL_PRESETS: { label: string; seconds: number }[] = [
+  { label: "Every 15 minutes", seconds: 15 * 60 },
+  { label: "Every 30 minutes", seconds: 30 * 60 },
+  { label: "Every hour", seconds: 60 * 60 },
+  { label: "Every 3 hours", seconds: 3 * 60 * 60 },
+  { label: "Every 6 hours", seconds: 6 * 60 * 60 },
+  { label: "Every 12 hours", seconds: 12 * 60 * 60 },
+];
+
+export function intervalLabel(seconds: number): string {
+  const preset = INTERVAL_PRESETS.find((p) => p.seconds === seconds);
+  if (preset) return preset.label;
+  // The legacy default of 14 min lands here for old rows.
+  if (seconds === 840) return "Every 15 minutes";
+  const m = Math.round(seconds / 60);
+  if (m < 60) return `Every ${m} min`;
+  const h = Math.round((seconds / 3600) * 10) / 10;
+  return `Every ${h} h`;
+}
+
 // Map our shipment status union to a semantic pill color.
 export function statusPillStyle(status: string): CSSProperties {
   const s = status.toLowerCase();

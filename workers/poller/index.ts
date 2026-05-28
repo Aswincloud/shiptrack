@@ -13,7 +13,6 @@ interface Env {
   APP_URL: string;
 }
 
-const POLL_INTERVAL_SECONDS = 14 * 60;
 const BATCH_SIZE = 50;
 const TERMINAL = new Set(["delivered", "returned"]);
 
@@ -102,7 +101,7 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
 export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const now = Math.floor(Date.now() / 1000);
-    const due = await listDueWatches(env.DB, now, POLL_INTERVAL_SECONDS, BATCH_SIZE);
+    const due = await listDueWatches(env.DB, now, BATCH_SIZE);
     if (due.length === 0) return;
     console.log(`polling ${due.length} watches`);
     const tasks = due.map((w) => processWatch(env, w).catch((e) => console.error(`watch ${w.id}:`, e)));
