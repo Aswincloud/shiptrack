@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getEnv } from "@/lib/env";
+import { getEnvAsync } from "@/lib/env";
 import { readSessionFromCookies } from "@/lib/auth";
 import "./globals.css";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "ShipTrack — Open shipment tracking",
@@ -10,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const env = getEnv();
+  const env = await getEnvAsync();
   const signedIn = env?.DB && env?.TOKEN_SECRET
     ? !!(await readSessionFromCookies(env.TOKEN_SECRET))
     : false;

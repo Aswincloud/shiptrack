@@ -14,3 +14,15 @@ export function getEnv(): AppEnv {
   const { env } = getCloudflareContext();
   return env as unknown as AppEnv;
 }
+
+// Async variant — safe to call in async server components / layouts that
+// would otherwise be statically prerendered. Returns null at build time when
+// no Cloudflare context is available.
+export async function getEnvAsync(): Promise<AppEnv | null> {
+  try {
+    const { env } = await getCloudflareContext({ async: true });
+    return env as unknown as AppEnv;
+  } catch {
+    return null;
+  }
+}
