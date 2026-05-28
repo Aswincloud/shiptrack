@@ -121,8 +121,8 @@ function VerifyInner() {
         <button type="button" onClick={resend} disabled={resending} style={buttonGhostStyle}>
           {resending ? "Sending…" : "Resend code"}
         </button>
-        {error && <div style={{ color: "#ff9b9b", fontSize: 13 }}>{error}</div>}
-        {info && <div style={{ color: "#7cd992", fontSize: 13 }}>{info}</div>}
+        {error && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
+        {info && <div style={{ color: "var(--success)", fontSize: 13 }}>{info}</div>}
       </form>
     </main>
   );

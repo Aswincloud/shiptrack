@@ -197,7 +197,7 @@ function WatchRow({
         {w.status !== "cancelled" && (
           <>
             <button type="button" onClick={onEdit} style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 13, marginRight: 4 }}>Edit</button>
-            <button type="button" onClick={onCancel} style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 13, color: "#ff9b9b", borderColor: "#5a2a2a" }}>Cancel</button>
+            <button type="button" onClick={onCancel} style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 13, color: "var(--danger)", borderColor: "var(--danger)" }}>Cancel</button>
           </>
         )}
       </td>
@@ -243,7 +243,7 @@ function ResendKeySection({ initial, onChange }: { initial: boolean; onChange: (
       <div style={{ fontWeight: 600, marginBottom: 4 }}>Resend API key (optional)</div>
       <div style={{ color: "var(--muted)", fontSize: 13, marginBottom: 12 }}>
         Set your own Resend key to send alerts from your domain. Leave blank to use the shared system key.
-        {" "}Status: {initial ? <span style={{ color: "#7cd992" }}>configured ✓</span> : "not set"}
+        {" "}Status: {initial ? <span style={{ color: "var(--success)" }}>configured ✓</span> : "not set"}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input
@@ -376,7 +376,7 @@ function AdminSection({
                   <td style={td}>{u.email}</td>
                   <td style={td}>
                     {u.email_verified === 1 ? (
-                      <span style={{ color: "#7cd992" }}>✓</span>
+                      <span style={{ color: "var(--success)" }}>✓</span>
                     ) : (
                       <span style={{ color: "var(--muted)" }}>—</span>
                     )}
@@ -414,7 +414,7 @@ function AdminSection({
                       type="button"
                       onClick={() => deleteUser(u)}
                       disabled={actingId === u.id}
-                      style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, color: "#ff9b9b", borderColor: "#5a2a2a" }}
+                      style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, color: "var(--danger)", borderColor: "var(--danger)" }}
                     >
                       Delete
                     </button>
@@ -425,8 +425,8 @@ function AdminSection({
           </table>
         </div>
       </div>
-      {info && <div style={{ marginTop: 12, fontSize: 13, color: "#7cd992" }}>{info}</div>}
-      {error && <div style={{ marginTop: 12, fontSize: 13, color: "#ff9b9b" }}>{error}</div>}
+      {info && <div style={{ marginTop: 12, fontSize: 13, color: "var(--success)" }}>{info}</div>}
+      {error && <div style={{ marginTop: 12, fontSize: 13, color: "var(--danger)" }}>{error}</div>}
     </div>
   );
 }

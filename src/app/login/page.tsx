@@ -72,7 +72,7 @@ export default function LoginPage() {
         <button type="submit" disabled={submitting} style={buttonStyle}>
           {submitting ? "Signing in…" : "Sign in"}
         </button>
-        {error && <div style={{ color: "#ff9b9b", fontSize: 13 }}>{error}</div>}
+        {error && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
       </form>
       <p style={{ marginTop: 16, color: "var(--muted)", fontSize: 14, display: "flex", justifyContent: "space-between" }}>
         <Link href="/signup">Create account</Link>

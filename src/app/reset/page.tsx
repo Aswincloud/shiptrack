@@ -72,7 +72,7 @@ function ResetInner() {
           <button type="submit" disabled={submitting} style={buttonStyle}>
             {submitting ? "Saving…" : "Update password"}
           </button>
-          {error && <div style={{ color: "#ff9b9b", fontSize: 13 }}>{error}</div>}
+          {error && <div style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
         </form>
       )}
     </main>

@@ -63,7 +63,7 @@ export default function Home() {
       </form>
 
       {error && (
-        <div style={{ ...cardStyle, borderColor: "#5a2a2a", color: "#ff9b9b" }}>
+        <div style={{ ...cardStyle, borderColor: "var(--danger)", color: "var(--danger)" }}>
           {error}
         </div>
       )}
@@ -204,7 +204,7 @@ function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumb
           style={{
             marginTop: 12,
             fontSize: 13,
-            color: status.kind === "ok" ? "#7cd992" : "#ff9b9b",
+            color: status.kind === "ok" ? "var(--success)" : "var(--danger)",
           }}
         >
           {status.msg}
