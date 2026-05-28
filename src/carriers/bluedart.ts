@@ -1,126 +1,130 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
 
-const BLUEDART_HOSTS = {
-  prod: "https://apigateway.bluedart.com",
-  staging: "https://apigateway-sandbox.bluedart.com",
-} as const;
-
-// Blue Dart auth (per the DHL API Portal "Authentication API" docs):
-//   GET {host}/in/transportation/token/v1/login
-//   Headers: ClientID, clientSecret
-//   Response: { JWTToken: "..." }
+// Blue Dart's commercial "Tracking API" requires customer credentials (LoginID
+// and a tracking-API License Key) issued by a Blue Dart account manager. They
+// are not free and not obtainable through the DHL Developer Portal.
 //
-// The tracking API then takes the JWT in a header and the same credentials
-// echoed as URL query params `loginid` and `lickey` (Blue Dart legacy naming).
+// Instead we scrape the public Liferay-rendered tracking page that any user
+// visits at bluedart.com. All data is server-rendered into the HTML; no JS
+// execution required. Fields are pulled from the "Shipment Details" and
+// "Status and Scans" tables.
+//
+// Risk: if Blue Dart redesigns the page, parsing breaks. The current selectors
+// are deliberately loose (label-text matching) to survive minor HTML changes.
 
-function mapStatus(scanCode: string | undefined, scanType: string | undefined): ShipmentStatus {
-  const code = (scanCode ?? "").toUpperCase();
-  const type = (scanType ?? "").toUpperCase();
-  if (type === "DL" || code === "DELIVERED") return "delivered";
-  if (code === "OFD" || type === "OFD") return "out_for_delivery";
-  if (code === "PU" || code === "PICKEDUP") return "picked_up";
-  if (code === "RTO" || type === "RT") return "returned";
-  if (code.startsWith("EX") || type === "EX") return "exception";
-  if (code === "IT" || type === "UD") return "in_transit";
+const TRACK_URL = "https://www.bluedart.com/trackdartresultthirdparty";
+const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+function mapStatus(text: string): ShipmentStatus {
+  const t = text.toLowerCase();
+  if (t.includes("delivered") && !t.includes("attempted") && !t.includes("undelivered")) return "delivered";
+  if (t.includes("out for delivery")) return "out_for_delivery";
+  if (t.includes("returned") || t.includes("rto")) return "returned";
+  if (t.includes("picked up") || t.includes("pickup")) return "picked_up";
+  if (t.includes("address incomplete") || t.includes("premises closed") || t.includes("undelivered") || t.includes("attempt")) {
+    return "exception";
+  }
+  if (t.includes("in transit") || t.includes("arrived") || t.includes("connected") || t.includes("shipped")) {
+    return "in_transit";
+  }
   return "unknown";
 }
 
-async function getJwt(clientId: string, clientSecret: string, host: string): Promise<string> {
-  const url = `${host}/in/transportation/token/v1/login`;
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      ClientID: clientId,
-      clientSecret: clientSecret,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new CarrierError(`Blue Dart auth failed (${res.status}) ${body}`, "upstream_error", 502);
+function stripTags(s: string): string {
+  return s
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// Pull the value cell next to a <th> whose text matches the given label.
+function fieldByLabel(html: string, label: string): string | undefined {
+  const re = new RegExp(
+    `<th[^>]*>\\s*${label.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\s*</th>\\s*<td[^>]*>([\\s\\S]*?)</td>`,
+    "i",
+  );
+  const m = html.match(re);
+  if (!m) return undefined;
+  const v = stripTags(m[1]);
+  return v.length ? v : undefined;
+}
+
+// Parse the "Status and Scans" tbody into individual TrackingEvent rows.
+function parseScans(html: string): TrackingEvent[] {
+  const scanSection = html.match(/Status and Scans[\s\S]*?<tbody>([\s\S]*?)<\/tbody>/i);
+  if (!scanSection) return [];
+
+  const rows = scanSection[1].match(/<tr>[\s\S]*?<\/tr>/gi) ?? [];
+  const events: TrackingEvent[] = [];
+
+  for (const row of rows) {
+    const cells = Array.from(row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)).map((m) => stripTags(m[1]));
+    if (cells.length < 4) continue;
+    const [location, description, dateStr, timeStr] = cells;
+    if (!description) continue;
+    events.push({
+      timestamp: `${dateStr} ${timeStr}`.trim(),
+      status: mapStatus(description),
+      location: location || undefined,
+      description,
+    });
   }
-  const body = (await res.json()) as { JWTToken?: string };
-  if (!body.JWTToken) throw new CarrierError("Blue Dart auth: no token in response", "upstream_error", 502);
-  return body.JWTToken;
+
+  // Page renders most-recent first; reverse so caller's `events[last]` is latest.
+  return events.reverse();
 }
 
 export const bluedart: Carrier = {
   id: "bluedart",
   name: "Blue Dart",
   async track(trackingNumber: string): Promise<TrackingResult> {
-    const clientId = process.env.BLUEDART_CLIENT_ID;
-    const clientSecret = process.env.BLUEDART_CLIENT_SECRET;
-    const env = (process.env.BLUEDART_ENV === "prod" ? "prod" : "staging") as keyof typeof BLUEDART_HOSTS;
-    const host = BLUEDART_HOSTS[env];
-
-    if (!clientId || !clientSecret) {
-      throw new CarrierError(
-        "Blue Dart credentials not configured. Set BLUEDART_CLIENT_ID, BLUEDART_CLIENT_SECRET.",
-        "not_configured",
-        503,
-      );
-    }
-
     const cleaned = trackingNumber.trim();
-    if (!/^[A-Za-z0-9-]{6,20}$/.test(cleaned)) {
+    if (!/^[0-9]{6,20}$/.test(cleaned)) {
       throw new CarrierError("Invalid Blue Dart tracking number format.", "invalid_input", 400);
     }
 
-    const jwt = await getJwt(clientId, clientSecret, host);
-    const url = `${host}/in/transportation/tracking/v1?handler=tnt&loginid=${encodeURIComponent(clientId)}&awbno=${encodeURIComponent(cleaned)}&format=json&lickey=${encodeURIComponent(clientSecret)}&verno=1.3&scan=Y`;
-
+    const url = `${TRACK_URL}?trackFor=0&trackNo=${encodeURIComponent(cleaned)}`;
     const res = await fetch(url, {
       method: "GET",
-      headers: { JWTToken: jwt, Accept: "application/json" },
+      headers: { "User-Agent": UA, Accept: "text/html" },
       cache: "no-store",
     });
 
     if (res.status === 429) throw new CarrierError("Blue Dart rate-limited", "rate_limited", 429);
-    if (res.status === 404) throw new CarrierError("Tracking number not found", "not_found", 404);
     if (!res.ok) throw new CarrierError(`Blue Dart upstream error (${res.status})`, "upstream_error", 502);
 
-    const raw = await res.json();
-    const data = (raw as { ShipmentData?: unknown }).ShipmentData;
+    const html = await res.text();
 
-    if (data && typeof data === "object" && !Array.isArray(data) && "Error" in data) {
-      const msg = String((data as { Error: unknown }).Error ?? "");
-      if (/incorrect waybill|no information|not found/i.test(msg)) {
-        throw new CarrierError("Tracking number not found", "not_found", 404);
-      }
-      throw new CarrierError(`Blue Dart error: ${msg}`, "upstream_error", 502);
+    // Public page returns 200 even for unknown AWBs; detect via the body.
+    if (/Records Not Found|no information on the Waybill/i.test(html)) {
+      throw new CarrierError("Tracking number not found", "not_found", 404);
     }
 
-    const shipment = (Array.isArray(data) ? data[0] : data) as
-      | { Shipment?: Record<string, unknown>; Scans?: Array<Record<string, unknown>> }
-      | undefined;
-    const head = shipment?.Shipment ?? {};
-    const scans = shipment?.Scans ?? [];
+    // Scope to the result panel for this AWB if present (defensive against future multi-AWB pages).
+    const panelRe = new RegExp(`id="${cleaned}-rdrmv"[\\s\\S]*?(?=<!--\\s*AWB${cleaned}\\s*-->|$)`, "i");
+    const panel = html.match(panelRe)?.[0] ?? html;
 
-    const events: TrackingEvent[] = scans.map((s) => {
-      const code = (s.ScanCode as string) ?? undefined;
-      const type = (s.ScanType as string) ?? undefined;
-      return {
-        timestamp: `${s.ScanDate ?? ""}T${s.ScanTime ?? "00:00:00"}`,
-        status: mapStatus(code, type),
-        location: (s.ScannedLocation as string) ?? undefined,
-        description: (s.Scan as string) ?? "",
-        rawCode: code,
-      };
-    });
-
+    const status = fieldByLabel(panel, "Status");
+    const expectedDelivery = fieldByLabel(panel, "Expected Date of Delivery");
+    const origin = fieldByLabel(panel, "From");
+    const destination = fieldByLabel(panel, "To");
+    const events = parseScans(panel);
     const latest = events[events.length - 1];
 
     return {
       carrier: "bluedart",
       trackingNumber: cleaned,
-      status: latest?.status ?? "unknown",
-      estimatedDelivery: (head.ExpectedDeliveryDate as string) ?? undefined,
-      origin: (head.Origin as string) ?? undefined,
-      destination: (head.Destination as string) ?? undefined,
+      status: latest ? latest.status : status ? mapStatus(status) : "unknown",
+      estimatedDelivery: expectedDelivery,
+      origin,
+      destination,
       events,
       fetchedAt: new Date().toISOString(),
-      raw,
+      raw: { source: "scrape", url },
     };
   },
 };

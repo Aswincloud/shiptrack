@@ -44,22 +44,17 @@ Response shape: see [`src/carriers/types.ts`](src/carriers/types.ts).
 
 ### Blue Dart
 
-Blue Dart's tracking API is hosted on the [DHL Developer Portal](https://developer.dhl.com):
+No credentials required. The carrier scrapes the public tracking page at
+`https://www.bluedart.com/trackdartresultthirdparty`, which renders all
+shipment data server-side.
 
-1. Sign up, then **My Apps → Add Developer App**.
-2. Subscribe to **Shipment Tracking (DHL eCommerce India, Blue Dart)**.
-3. On the app page, reveal the **API Key** and **API Secret** values.
-4. Set them as:
+Blue Dart's commercial tracking API is gated behind customer credentials
+issued by a Blue Dart account manager; a DHL Developer Portal app on its
+own is not sufficient. If you have such credentials and want to switch to
+the official API, the prior version of `src/carriers/bluedart.ts` in git
+history shows the request shape.
 
-```
-BLUEDART_CLIENT_ID=<API Key>
-BLUEDART_CLIENT_SECRET=<API Secret>
-BLUEDART_ENV=prod   # or "staging" for sandbox
-```
-
-**Note:** the portal says newly-created apps need ~24 hours after creation before auth calls succeed, even if the status shows "Approved" immediately.
-
-Blue Dart's API doesn't publish hard rate limits but returns HTTP 429 when exceeded. Polling once per 15–30 minutes per shipment is plenty.
+Polling every 15–30 minutes per shipment is plenty.
 
 ## Adding a carrier
 
@@ -108,14 +103,12 @@ npm run db:migrate
 npm run db:migrate:remote
 
 # 3. Set secrets on the web worker
-for k in ADMIN_TOKEN TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL \
-         BLUEDART_CLIENT_ID BLUEDART_CLIENT_SECRET BLUEDART_ENV; do
+for k in ADMIN_TOKEN TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL; do
   npx wrangler secret put "$k"
 done
 
 # 4. Set the relevant secrets on the poller (no ADMIN_TOKEN needed there)
-for k in TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL \
-         BLUEDART_CLIENT_ID BLUEDART_CLIENT_SECRET BLUEDART_ENV; do
+for k in TOKEN_SECRET RESEND_API_KEY RESEND_FROM APP_URL; do
   npx wrangler secret put "$k" -c wrangler.poller.jsonc
 done
 
@@ -133,15 +126,6 @@ This repo is configured for [`@opennextjs/cloudflare`](https://opennext.js.org/c
 npm install
 npx wrangler login
 npm run deploy
-```
-
-Set carrier secrets on the deployed worker (not committed):
-
-```bash
-npx wrangler secret put BLUEDART_LICENSE_KEY
-npx wrangler secret put BLUEDART_LOGIN_ID
-npx wrangler secret put BLUEDART_API_KEY
-npx wrangler secret put BLUEDART_ENV   # "prod" or "staging"
 ```
 
 Local Workers preview (runs the actual worker bundle):

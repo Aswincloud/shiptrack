@@ -11,9 +11,6 @@ interface Env {
   RESEND_API_KEY: string;
   RESEND_FROM: string;
   APP_URL: string;
-  BLUEDART_CLIENT_ID?: string;
-  BLUEDART_CLIENT_SECRET?: string;
-  BLUEDART_ENV?: string;
 }
 
 const POLL_INTERVAL_SECONDS = 14 * 60;
@@ -32,16 +29,6 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
   if (!carrier) {
     await markPolled(env.DB, w.id);
     return;
-  }
-
-  // Re-export carrier env vars onto process.env-like for the carrier's fetch
-  // (Cloudflare Workers exposes them on `env`; our carriers read `process.env`
-  // which is shimmed by nodejs_compat — so we set them on globalThis.process.env.)
-  const procEnv = (globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process?.env;
-  if (procEnv) {
-    if (env.BLUEDART_CLIENT_ID) procEnv.BLUEDART_CLIENT_ID = env.BLUEDART_CLIENT_ID;
-    if (env.BLUEDART_CLIENT_SECRET) procEnv.BLUEDART_CLIENT_SECRET = env.BLUEDART_CLIENT_SECRET;
-    if (env.BLUEDART_ENV) procEnv.BLUEDART_ENV = env.BLUEDART_ENV;
   }
 
   let result;
