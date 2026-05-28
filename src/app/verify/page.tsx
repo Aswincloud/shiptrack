@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, pageWrapStyle } from "../styles";
 
@@ -13,9 +13,13 @@ function VerifyInner() {
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const submittedFor = useRef<string | null>(null); // dedupe: prevent double-submit for the same code
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  async function handle(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(value: string) {
+    if (value.length !== 6) return;
+    if (submittedFor.current === value) return;
+    submittedFor.current = value;
     setError(null);
     setInfo(null);
     setSubmitting(true);
@@ -23,19 +27,51 @@ function VerifyInner() {
       const res = await fetch("/api/auth/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code }),
+        body: JSON.stringify({ email, code: value }),
       });
       if (res.ok) {
         router.push("/dashboard");
         return;
       }
       const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "Verification failed");
+      const errCode = body.error as string | undefined;
+      if (errCode === "invalid_code") {
+        setError("That code didn't match. Try again.");
+        setCode("");
+        inputRef.current?.focus();
+      } else if (errCode === "expired") {
+        setError("That code has expired. Tap “Resend code”.");
+        setCode("");
+      } else if (errCode === "too_many_attempts") {
+        setError("Too many attempts. Tap “Resend code” for a new one.");
+        setCode("");
+      } else {
+        setError(errCode ?? "Verification failed");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Network error");
+      setCode("");
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Reset the dedupe key whenever the input shrinks below 6 — that means the
+  // user cleared or backspaced after a failed attempt, so a fresh 6 digits
+  // (even if identical) should re-submit.
+  useEffect(() => {
+    if (code.length < 6) submittedFor.current = null;
+  }, [code]);
+
+  // Auto-submit as soon as 6 digits are entered.
+  useEffect(() => {
+    if (code.length === 6 && !submitting) submit(code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
+  async function handleForm(e: React.FormEvent) {
+    e.preventDefault();
+    await submit(code);
   }
 
   async function resend() {
@@ -66,14 +102,16 @@ function VerifyInner() {
       <p style={{ color: "var(--muted)", margin: "0 0 24px" }}>
         We sent a 6-digit code to <strong style={{ color: "var(--fg)" }}>{email}</strong>.
       </p>
-      <form onSubmit={handle} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
+      <form onSubmit={handleForm} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
         <input
+          ref={inputRef}
           inputMode="numeric"
           pattern="\d{6}"
           maxLength={6}
           required
+          autoFocus
           value={code}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
           placeholder="000000"
           style={{ ...inputStyle, fontSize: 24, letterSpacing: 6, textAlign: "center" }}
         />
