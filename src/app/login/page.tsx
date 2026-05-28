@@ -44,8 +44,8 @@ export default function LoginPage() {
 
   return (
     <main style={pageWrapStyle}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Sign in</h1>
-      <p style={{ color: "var(--muted)", margin: "0 0 24px" }}>Welcome back.</p>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>Welcome back</h1>
+      <p style={{ color: "var(--muted)", margin: "0 0 28px", fontSize: 15 }}>Sign in to manage your shipment alerts.</p>
       <form onSubmit={handle} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
         <label style={labelStyle}>
           Email

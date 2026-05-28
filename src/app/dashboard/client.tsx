@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle } from "../styles";
+import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, statusPillStyle } from "../styles";
 
 interface ClientWatch {
   id: string;
@@ -52,63 +52,108 @@ export function DashboardClient({
   }
 
   return (
-    <main style={{ maxWidth: 880, margin: "0 auto", padding: "48px 20px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 24 }}>
+    <main style={{ maxWidth: 960, margin: "0 auto", padding: "48px 24px" }}>
+      <header
+        style={{
+          ...cardStyle,
+          padding: "24px 28px",
+          marginBottom: 24,
+          background: "linear-gradient(135deg, #ffffff 0%, var(--accent-soft) 100%)",
+          borderColor: "var(--accent-soft)",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 16,
+          flexWrap: "wrap",
+        }}
+      >
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0 }}>Dashboard</h1>
-          <p style={{ color: "var(--muted)", margin: "4px 0 0" }}>{email}</p>
+          <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+            Dashboard
+          </div>
+          <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: "-0.02em" }}>
+            Welcome back
+          </h1>
+          <p style={{ color: "var(--muted)", margin: "4px 0 0", fontSize: 14 }}>{email}</p>
         </div>
-        <a href="/" style={{ color: "var(--accent)", fontSize: 14 }}>+ Track a shipment</a>
-      </div>
+        <a
+          href="/"
+          style={{
+            padding: "10px 18px",
+            borderRadius: 10,
+            background: "var(--accent-gradient)",
+            color: "#fff",
+            textDecoration: "none",
+            fontSize: 14,
+            fontWeight: 600,
+            boxShadow: "var(--shadow-md)",
+          }}
+        >
+          + Track a shipment
+        </a>
+      </header>
 
-      {watches.length === 0 ? (
-        <div style={{ ...cardStyle, textAlign: "center", color: "var(--muted)" }}>
-          <p style={{ margin: 0 }}>No watches yet.</p>
-          <p style={{ marginTop: 8, fontSize: 14 }}>
-            <a href="/">Track a shipment</a> and click &ldquo;Notify me on changes&rdquo; to add one.
-          </p>
-        </div>
-      ) : (
-        <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-            <thead>
-              <tr style={{ background: "var(--card)", color: "var(--muted)", fontSize: 12, textAlign: "left" }}>
-                <th style={th}>Tracking</th>
-                <th style={th}>Label</th>
-                <th style={th}>Notify email</th>
-                <th style={th}>Status</th>
-                <th style={th}>Last poll</th>
-                <th style={th}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {watches.map((w) => (
-                <WatchRow
-                  key={w.id}
-                  watch={w}
-                  editing={editingId === w.id}
-                  onEdit={() => setEditingId(w.id)}
-                  onSave={(patch) => {
-                    setWatches((ws) => ws.map((x) => (x.id === w.id ? { ...x, ...patch } : x)));
-                    setEditingId(null);
-                  }}
-                  onCancel={() => cancelWatch(w.id)}
-                  onCloseEdit={() => setEditingId(null)}
-                />
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <section style={{ marginBottom: 32 }}>
+        <h2 style={sectionTitle}>
+          Your watches <span style={countBadge}>{watches.length}</span>
+        </h2>
+        {watches.length === 0 ? (
+          <div style={{ ...cardStyle, textAlign: "center", padding: "48px 24px" }}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>📦</div>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>No watches yet</div>
+            <div style={{ color: "var(--muted)", fontSize: 14 }}>
+              <a href="/">Track a shipment</a> and click &ldquo;Notify me on changes&rdquo; to add one.
+            </div>
+          </div>
+        ) : (
+          <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+              <thead>
+                <tr style={{ background: "var(--neutral-bg)", color: "var(--muted)", fontSize: 11, textAlign: "left", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <th style={th}>Tracking</th>
+                  <th style={th}>Label</th>
+                  <th style={th}>Notify email</th>
+                  <th style={th}>Status</th>
+                  <th style={th}>Last poll</th>
+                  <th style={th}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {watches.map((w) => (
+                  <WatchRow
+                    key={w.id}
+                    watch={w}
+                    editing={editingId === w.id}
+                    onEdit={() => setEditingId(w.id)}
+                    onSave={(patch) => {
+                      setWatches((ws) => ws.map((x) => (x.id === w.id ? { ...x, ...patch } : x)));
+                      setEditingId(null);
+                    }}
+                    onCancel={() => cancelWatch(w.id)}
+                    onCloseEdit={() => setEditingId(null)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginBottom: 32 }}>
+        <h2 style={sectionTitle}>Notification settings</h2>
+        <ResendKeySection initial={keyConfigured} onChange={setKeyConfigured} />
+      </section>
+
+      {isAdmin && adminUsers && (
+        <section>
+          <AdminSection initialUsers={adminUsers} currentUserId={undefined} />
+        </section>
       )}
 
-      <ResendKeySection initial={keyConfigured} onChange={setKeyConfigured} />
-
-      {isAdmin && adminUsers && <AdminSection initialUsers={adminUsers} currentUserId={undefined} />}
-
-      <div style={{ marginTop: 32, color: "var(--muted)", fontSize: 13 }}>
+      <div style={{ marginTop: 40, textAlign: "center" }}>
         <button
           type="button"
-          style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 13 }}
+          style={{ ...buttonGhostStyle, padding: "8px 16px", fontSize: 13 }}
           onClick={async () => {
             await fetch("/api/auth/logout", { method: "POST" });
             router.push("/");
@@ -120,6 +165,32 @@ export function DashboardClient({
     </main>
   );
 }
+
+const sectionTitle: React.CSSProperties = {
+  fontSize: 13,
+  fontWeight: 600,
+  color: "var(--muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.08em",
+  margin: "0 0 12px",
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+};
+
+const countBadge: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  minWidth: 20,
+  height: 20,
+  padding: "0 6px",
+  borderRadius: 999,
+  background: "var(--accent-soft)",
+  color: "var(--accent)",
+  fontSize: 11,
+  fontWeight: 700,
+};
 
 function WatchRow({
   watch: w,
@@ -183,21 +254,26 @@ function WatchRow({
     );
   }
 
+  const pillStatus =
+    w.status === "cancelled" ? "cancelled" : (w.lastKnownStatus ?? w.status);
+
   return (
     <tr style={trStyle}>
       <td style={td}>
         <code style={{ fontSize: 13 }}>{w.trackingNumber}</code>
-        <div style={{ color: "var(--muted)", fontSize: 12 }}>{w.carrier}</div>
+        <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 2, textTransform: "capitalize" }}>{w.carrier}</div>
       </td>
-      <td style={td}>{w.label ?? <span style={{ color: "var(--muted)" }}>—</span>}</td>
+      <td style={td}>{w.label ?? <span style={{ color: "var(--muted-soft)" }}>—</span>}</td>
       <td style={td}><span style={{ color: "var(--muted)" }}>{w.email}</span></td>
-      <td style={td}>{statusText}</td>
+      <td style={td}>
+        <span style={statusPillStyle(pillStatus)}>{statusText}</span>
+      </td>
       <td style={{ ...td, color: "var(--muted)", fontSize: 12 }}>{polled}</td>
       <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
         {w.status !== "cancelled" && (
           <>
-            <button type="button" onClick={onEdit} style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 13, marginRight: 4 }}>Edit</button>
-            <button type="button" onClick={onCancel} style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 13, color: "var(--danger)", borderColor: "var(--danger)" }}>Cancel</button>
+            <button type="button" onClick={onEdit} style={{ ...buttonGhostStyle, padding: "7px 12px", fontSize: 13, marginRight: 4 }}>Edit</button>
+            <button type="button" onClick={onCancel} style={{ ...buttonGhostStyle, padding: "7px 12px", fontSize: 13, color: "var(--danger)", borderColor: "var(--danger-border)", background: "var(--danger-bg)" }}>Cancel</button>
           </>
         )}
       </td>
@@ -432,12 +508,12 @@ function AdminSection({
 }
 
 const th: React.CSSProperties = {
-  padding: "12px 14px",
+  padding: "10px 16px",
   borderBottom: "1px solid var(--border)",
-  fontWeight: 500,
+  fontWeight: 600,
 };
 const td: React.CSSProperties = {
-  padding: "12px 14px",
+  padding: "14px 16px",
   borderBottom: "1px solid var(--border)",
 };
 const trStyle: React.CSSProperties = {};

@@ -98,8 +98,8 @@ function VerifyInner() {
 
   return (
     <main style={pageWrapStyle}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Verify your email</h1>
-      <p style={{ color: "var(--muted)", margin: "0 0 24px" }}>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>Verify your email</h1>
+      <p style={{ color: "var(--muted)", margin: "0 0 28px", fontSize: 15 }}>
         We sent a 6-digit code to <strong style={{ color: "var(--fg)" }}>{email}</strong>.
       </p>
       <form onSubmit={handleForm} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>

@@ -51,8 +51,8 @@ function ResetInner() {
 
   return (
     <main style={pageWrapStyle}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Reset password</h1>
-      <p style={{ color: "var(--muted)", margin: "0 0 24px" }}>Choose a new password.</p>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>Reset password</h1>
+      <p style={{ color: "var(--muted)", margin: "0 0 28px", fontSize: 15 }}>Choose a new password.</p>
       {done ? (
         <div style={cardStyle}>
           <p style={{ margin: 0 }}>Password updated. Redirecting to sign in…</p>

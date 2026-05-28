@@ -37,8 +37,8 @@ export default function SignupPage() {
 
   return (
     <main style={pageWrapStyle}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Create account</h1>
-      <p style={{ color: "var(--muted)", margin: "0 0 24px" }}>
+      <h1 style={{ fontSize: 28, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>Create account</h1>
+      <p style={{ color: "var(--muted)", margin: "0 0 28px", fontSize: 15 }}>
         Sign up to track shipments and get alerts.
       </p>
       <form onSubmit={handle} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
