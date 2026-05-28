@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { createWatch, confirmWatch } from "@/lib/db";
+import { createWatch, confirmWatch, getUserById } from "@/lib/db";
 import { getCarrier } from "@/carriers/registry";
 import { readSession } from "@/lib/auth";
+import { signToken } from "@/lib/tokens";
+import { sendEmail, watchCreatedEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -45,16 +47,54 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "carrier_not_supported" }, { status: 400 });
   }
 
+  const cleanedEmail = email.toLowerCase();
+  const cleanedCarrier = carrier.toLowerCase();
+  const cleanedTracking = trackingNumber.trim();
+  const cleanedLabel = label ?? null;
+
   const id = crypto.randomUUID();
   await createWatch(env.DB, {
     id,
     userId,
-    email: email.toLowerCase(),
-    carrier: carrier.toLowerCase(),
-    trackingNumber: trackingNumber.trim(),
-    label: label ?? null,
+    email: cleanedEmail,
+    carrier: cleanedCarrier,
+    trackingNumber: cleanedTracking,
+    label: cleanedLabel,
   });
   await confirmWatch(env.DB, id);
+
+  // Best-effort confirmation email so the user knows the watch is registered
+  // and has an immediate unsubscribe link.
+  if (env.RESEND_API_KEY && env.RESEND_FROM) {
+    let resendKey = env.RESEND_API_KEY;
+    if (userId) {
+      try {
+        const user = await getUserById(env.DB, userId);
+        if (user?.resend_api_key) resendKey = user.resend_api_key;
+      } catch {
+        // Fall back to the system key.
+      }
+    }
+
+    const unsubToken = await signToken(env.TOKEN_SECRET, id, "unsubscribe");
+    const unsubscribeUrl = `${env.APP_URL.replace(/\/$/, "")}/api/watches/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
+
+    const tpl = watchCreatedEmail({
+      appUrl: env.APP_URL,
+      carrier: cleanedCarrier,
+      trackingNumber: cleanedTracking,
+      label: cleanedLabel,
+      unsubscribeUrl,
+    });
+    try {
+      await sendEmail(
+        { RESEND_API_KEY: resendKey, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
+        { to: cleanedEmail, ...tpl },
+      );
+    } catch (err) {
+      console.warn("watch confirmation email failed:", err instanceof Error ? err.message : err);
+    }
+  }
 
   return NextResponse.json({ status: "active", id }, { status: 201 });
 }

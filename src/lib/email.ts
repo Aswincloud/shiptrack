@@ -109,6 +109,39 @@ export function otpEmail(args: {
   return { subject, html, text };
 }
 
+export function watchCreatedEmail(args: {
+  appUrl: string;
+  carrier: string;
+  trackingNumber: string;
+  label?: string | null;
+  currentStatus?: string;
+  unsubscribeUrl: string;
+}): { subject: string; html: string; text: string } {
+  const ref = args.label ? `${args.label} (${args.trackingNumber})` : args.trackingNumber;
+  const subject = `Now watching ${ref}`;
+  const labelLine = args.label ? `<p style="margin:8px 0"><strong>Label:</strong> ${escapeHtml(args.label)}</p>` : "";
+  const statusLine = args.currentStatus
+    ? `<p style="margin:8px 0"><strong>Current status:</strong> ${escapeHtml(humanStatus(args.currentStatus))}</p>`
+    : "";
+  const html = `
+    <div style="font-family:system-ui,sans-serif;max-width:520px;margin:auto;padding:24px;color:#111">
+      <h2 style="margin:0 0 12px">You're watching this shipment</h2>
+      <p>We'll email you whenever the status changes.</p>
+      <p style="margin:8px 0"><strong>${escapeHtml(args.carrier)}</strong> · <code>${escapeHtml(args.trackingNumber)}</code></p>
+      ${labelLine}
+      ${statusLine}
+      <p style="margin:24px 0">
+        <a href="${args.appUrl}/dashboard" style="background:#6366f1;color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none">Open dashboard</a>
+      </p>
+      <p style="margin-top:32px;color:#666;font-size:12px">
+        Not what you wanted? <a href="${args.unsubscribeUrl}" style="color:#666">Stop watching this shipment</a>.
+      </p>
+    </div>
+  `;
+  const text = `Now watching ${args.carrier} ${args.trackingNumber}. We'll email you on status changes. Stop: ${args.unsubscribeUrl}`;
+  return { subject, html, text };
+}
+
 export function accountDeletedEmail(args: {
   appUrl: string;
 }): { subject: string; html: string; text: string } {

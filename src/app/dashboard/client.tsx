@@ -107,7 +107,7 @@ export function DashboardClient({
           </div>
         ) : (
           <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ background: "var(--neutral-bg)", color: "var(--muted)", fontSize: 11, textAlign: "left", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   <th style={th}>Tracking</th>
@@ -235,20 +235,20 @@ function WatchRow({
           <code style={{ fontSize: 13 }}>{w.trackingNumber}</code>
           <div style={{ color: "var(--muted)", fontSize: 12 }}>{w.carrier}</div>
         </td>
-        <td style={td}>
-          <input value={label} onChange={(e) => setLabel(e.target.value)} style={{ ...inputStyle, padding: "6px 8px", fontSize: 13 }} />
+        <td style={td} data-label="Label">
+          <input value={label} onChange={(e) => setLabel(e.target.value)} style={{ ...inputStyle, padding: "6px 8px", fontSize: 13, flex: 1 }} />
         </td>
-        <td style={td}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" style={{ ...inputStyle, padding: "6px 8px", fontSize: 13 }} />
+        <td style={td} data-label="Email">
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" style={{ ...inputStyle, padding: "6px 8px", fontSize: 13, flex: 1 }} />
         </td>
-        <td style={td} colSpan={2}>
+        <td style={td} data-label="Status" colSpan={2}>
           <em style={{ color: "var(--muted)", fontSize: 12 }}>Editing…</em>
         </td>
         <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
-          <button type="button" onClick={save} disabled={saving} style={{ ...buttonStyle, padding: "6px 12px", fontSize: 13, marginRight: 4 }}>
+          <button type="button" onClick={save} disabled={saving} style={{ ...buttonStyle, padding: "7px 14px", fontSize: 13, marginRight: 4 }}>
             {saving ? "…" : "Save"}
           </button>
-          <button type="button" onClick={onCloseEdit} style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 13 }}>Cancel</button>
+          <button type="button" onClick={onCloseEdit} style={{ ...buttonGhostStyle, padding: "7px 14px", fontSize: 13 }}>Cancel</button>
         </td>
       </tr>
     );
@@ -263,17 +263,17 @@ function WatchRow({
         <code style={{ fontSize: 13 }}>{w.trackingNumber}</code>
         <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 2, textTransform: "capitalize" }}>{w.carrier}</div>
       </td>
-      <td style={td}>{w.label ?? <span style={{ color: "var(--muted-soft)" }}>—</span>}</td>
-      <td style={td}><span style={{ color: "var(--muted)" }}>{w.email}</span></td>
-      <td style={td}>
+      <td style={td} data-label="Label">{w.label ?? <span style={{ color: "var(--muted-soft)" }}>—</span>}</td>
+      <td style={td} data-label="Email"><span style={{ color: "var(--muted)" }}>{w.email}</span></td>
+      <td style={td} data-label="Status">
         <span style={statusPillStyle(pillStatus)}>{statusText}</span>
       </td>
-      <td style={{ ...td, color: "var(--muted)", fontSize: 12 }}>{polled}</td>
+      <td style={{ ...td, color: "var(--muted)", fontSize: 12 }} data-label="Last poll">{polled}</td>
       <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
         {w.status !== "cancelled" && (
           <>
-            <button type="button" onClick={onEdit} style={{ ...buttonGhostStyle, padding: "7px 12px", fontSize: 13, marginRight: 4 }}>Edit</button>
-            <button type="button" onClick={onCancel} style={{ ...buttonGhostStyle, padding: "7px 12px", fontSize: 13, color: "var(--danger)", borderColor: "var(--danger-border)", background: "var(--danger-bg)" }}>Cancel</button>
+            <button type="button" onClick={onEdit} style={{ ...buttonGhostStyle, padding: "7px 14px", fontSize: 13, marginRight: 4 }}>Edit</button>
+            <button type="button" onClick={onCancel} style={{ ...buttonGhostStyle, padding: "7px 14px", fontSize: 13, color: "var(--danger)", borderColor: "var(--danger-border)", background: "var(--danger-bg)" }}>Cancel</button>
           </>
         )}
       </td>
@@ -436,7 +436,7 @@ function AdminSection({
       <h2 style={{ fontSize: 16, fontWeight: 600, margin: "0 0 12px" }}>Users ({users.length})</h2>
       <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+          <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
             <thead>
               <tr style={{ color: "var(--muted)", fontSize: 12, textAlign: "left" }}>
                 <th style={th}>Email</th>
@@ -450,15 +450,15 @@ function AdminSection({
               {users.map((u) => (
                 <tr key={u.id}>
                   <td style={td}>{u.email}</td>
-                  <td style={td}>
+                  <td style={td} data-label="Verified">
                     {u.email_verified === 1 ? (
                       <span style={{ color: "var(--success)" }}>✓</span>
                     ) : (
                       <span style={{ color: "var(--muted)" }}>—</span>
                     )}
                   </td>
-                  <td style={td}>{u.watch_count}</td>
-                  <td style={{ ...td, color: "var(--muted)", fontSize: 12 }}>
+                  <td style={td} data-label="Watches">{u.watch_count}</td>
+                  <td style={{ ...td, color: "var(--muted)", fontSize: 12 }} data-label="Created">
                     {new Date(u.created_at * 1000).toLocaleDateString()}
                   </td>
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
