@@ -288,6 +288,13 @@ export async function listAdminEmails(db: D1Database): Promise<string[]> {
   return (res.results ?? []).map((r) => r.email);
 }
 
+export async function countAdmins(db: D1Database): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM users WHERE is_admin = 1`)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 export async function listAllUsersForAdmin(db: D1Database): Promise<AdminUserView[]> {
   const res = await db
     .prepare(

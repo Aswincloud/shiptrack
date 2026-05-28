@@ -295,7 +295,13 @@ function AdminSection({
       setUsers((us) => us.filter((x) => x.id !== u.id));
     } else {
       const body = await res.json().catch(() => ({}));
-      setError(body.error === "cannot_delete_self" ? "You can't delete your own admin account." : "Delete failed.");
+      const msg =
+        body.error === "cannot_delete_self"
+          ? "You can't delete your own admin account."
+          : body.error === "last_admin"
+            ? "Can't delete the last admin — promote another user first."
+            : "Delete failed.";
+      setError(msg);
     }
   }
 

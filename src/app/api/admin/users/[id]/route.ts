@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
 import { requireAdmin } from "@/lib/auth";
-import { getUserById, updateUserEmail, deleteUser } from "@/lib/db";
+import { getUserById, updateUserEmail, deleteUser, countAdmins } from "@/lib/db";
 import { sendEmail, accountDeletedEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +57,15 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
 
   const target = await getUserById(env.DB, id);
   if (!target) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // Don't let the last admin be removed — at least one admin must always exist
+  // to manage the system.
+  if (target.is_admin === 1) {
+    const admins = await countAdmins(env.DB);
+    if (admins <= 1) {
+      return NextResponse.json({ error: "last_admin" }, { status: 400 });
+    }
+  }
 
   await deleteUser(env.DB, id);
 
