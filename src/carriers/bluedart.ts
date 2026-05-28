@@ -68,7 +68,7 @@ export const bluedart: Carrier = {
     }
 
     const jwt = await getJwt(clientId, clientSecret, host);
-    const url = `${host}/in/transportation/tracking/v1/shipment?handler=tnt&loginid=${encodeURIComponent(clientId)}&awbno=${encodeURIComponent(cleaned)}&format=json&lickey=${encodeURIComponent(clientSecret)}&verno=1.3&scan=Y`;
+    const url = `${host}/in/transportation/tracking/v1?handler=tnt&loginid=${encodeURIComponent(clientId)}&awbno=${encodeURIComponent(cleaned)}&format=json&lickey=${encodeURIComponent(clientSecret)}&verno=1.3&scan=Y`;
 
     const res = await fetch(url, {
       method: "GET",
@@ -81,7 +81,17 @@ export const bluedart: Carrier = {
     if (!res.ok) throw new CarrierError(`Blue Dart upstream error (${res.status})`, "upstream_error", 502);
 
     const raw = await res.json();
-    const shipment = (raw as { ShipmentData?: unknown[] })?.ShipmentData?.[0] as
+    const data = (raw as { ShipmentData?: unknown }).ShipmentData;
+
+    if (data && typeof data === "object" && !Array.isArray(data) && "Error" in data) {
+      const msg = String((data as { Error: unknown }).Error ?? "");
+      if (/incorrect waybill|no information|not found/i.test(msg)) {
+        throw new CarrierError("Tracking number not found", "not_found", 404);
+      }
+      throw new CarrierError(`Blue Dart error: ${msg}`, "upstream_error", 502);
+    }
+
+    const shipment = (Array.isArray(data) ? data[0] : data) as
       | { Shipment?: Record<string, unknown>; Scans?: Array<Record<string, unknown>> }
       | undefined;
     const head = shipment?.Shipment ?? {};
