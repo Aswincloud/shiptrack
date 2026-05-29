@@ -124,6 +124,7 @@ export default function Home() {
           style={{ ...inputStyle, border: "none", background: "transparent", fontWeight: 500 }}
         >
           <option value="bluedart">Blue Dart</option>
+          <option value="shiprocket">Shiprocket (any courier)</option>
         </select>
         <input
           value={tracking}
