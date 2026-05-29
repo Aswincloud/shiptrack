@@ -1,12 +1,12 @@
 :root {
   --bg: #f8fafc;
   --bg-gradient:
-    radial-gradient(circle at 12% 18%, rgba(139, 92, 246, 0.32) 0%, transparent 38%),
-    radial-gradient(circle at 88% 12%, rgba(56, 189, 248, 0.30) 0%, transparent 42%),
-    radial-gradient(circle at 78% 82%, rgba(236, 72, 153, 0.26) 0%, transparent 45%),
-    radial-gradient(circle at 22% 88%, rgba(34, 197, 94, 0.20) 0%, transparent 40%),
-    linear-gradient(135deg, #f5f7ff 0%, #faf5ff 50%, #fdf2f8 100%);
-  --bg-pattern: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><circle cx='1.5' cy='1.5' r='1.4' fill='%236366f1' fill-opacity='0.30'/></svg>");
+    radial-gradient(circle at 12% 18%, rgba(139, 92, 246, 0.55) 0%, transparent 45%),
+    radial-gradient(circle at 88% 12%, rgba(56, 189, 248, 0.55) 0%, transparent 48%),
+    radial-gradient(circle at 78% 82%, rgba(236, 72, 153, 0.50) 0%, transparent 50%),
+    radial-gradient(circle at 22% 88%, rgba(34, 197, 94, 0.45) 0%, transparent 46%),
+    linear-gradient(135deg, #eef2ff 0%, #faf5ff 50%, #fce7f3 100%);
+  --bg-pattern: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><circle cx='1.5' cy='1.5' r='1.4' fill='%236366f1' fill-opacity='0.45'/></svg>");
   --fg: #0f172a;
   --fg-soft: #1e293b;
   --muted: #64748b;
@@ -42,10 +42,17 @@
 
 * { box-sizing: border-box; }
 
-html, body {
+html {
   margin: 0;
   padding: 0;
   background: var(--bg);
+}
+body {
+  margin: 0;
+  padding: 0;
+  /* Backdrop goes directly on body — no body::before z-index dance needed. */
+  background: var(--bg-gradient);
+  background-attachment: fixed;
   color: var(--fg);
   font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -56,24 +63,22 @@ html, body {
   min-height: 100vh;
 }
 
-/* Layered backdrop: dot grid + colored gradient blobs. Pseudo-elements so
-   they don't affect layout or get scrolled away with content. */
-body::before,
-body::after {
+/* Dot-grid overlay above the gradient. pointer-events disabled so it never
+   blocks clicks; sits behind app content via negative z-index. */
+body::before {
   content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: -1;
-}
-body::before {
-  background-image: var(--bg-gradient);
-}
-body::after {
+  z-index: 0;
   background-image: var(--bg-pattern);
   background-size: 28px 28px;
   mask-image: radial-gradient(ellipse at center top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.15) 100%);
   -webkit-mask-image: radial-gradient(ellipse at center top, rgba(0,0,0,1) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0.15) 100%);
+}
+body > * {
+  position: relative;
+  z-index: 1;
 }
 
 a {
