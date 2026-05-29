@@ -3,7 +3,10 @@ import Link from "next/link";
 import { PolicyLayout, h2Style, pStyle } from "../components/PolicyLayout";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — ShipTrack",
+  title: "Privacy Policy",
+  description:
+    "What data ShipTrack stores, what we don't store, where it lives, and how to delete your account.",
+  alternates: { canonical: "/privacy" },
 };
 
 export default function PrivacyPage() {

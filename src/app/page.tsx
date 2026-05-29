@@ -37,7 +37,36 @@ export default function Home() {
   }
 
   return (
-    <main style={{ maxWidth: 760, margin: "0 auto", padding: "64px 24px" }}>
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "WebApplication",
+                name: "ShipTrack",
+                url: "https://shiptrack.aswincloud.com",
+                description:
+                  "Free, open-source shipment tracking for Blue Dart with optional email alerts on status changes.",
+                applicationCategory: "BusinessApplication",
+                operatingSystem: "Any",
+                offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+                inLanguage: "en",
+              },
+              {
+                "@type": "Organization",
+                name: "ShipTrack",
+                url: "https://shiptrack.aswincloud.com",
+                logo: "https://shiptrack.aswincloud.com/apple-icon.svg",
+                sameAs: ["https://github.com/Aswincloud/shiptrack"],
+              },
+            ],
+          }),
+        }}
+      />
+      <main style={{ maxWidth: 760, margin: "0 auto", padding: "64px 24px" }}>
       <header style={{ textAlign: "center", marginBottom: 40 }}>
         <span
           style={{
@@ -222,6 +251,7 @@ export default function Home() {
         <div>MIT licensed · made by <a href="mailto:aswin@aswincloud.com" style={{ color: "var(--muted)" }}>Aswin</a></div>
       </footer>
     </main>
+    </>
   );
 }
 

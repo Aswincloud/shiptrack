@@ -3,10 +3,13 @@ import Link from "next/link";
 import { PolicyLayout, pStyle } from "../components/PolicyLayout";
 
 export const metadata: Metadata = {
-  title: "FAQ — ShipTrack",
+  title: "Blue Dart tracking FAQ",
+  description:
+    "How does ShipTrack work? Is it free? How often does it check? Common questions about tracking Blue Dart shipments and getting email alerts.",
+  alternates: { canonical: "/faq" },
 };
 
-const QA: { q: string; a: React.ReactNode }[] = [
+const QA: { q: string; a: React.ReactNode; aText: string }[] = [
   {
     q: "What is ShipTrack?",
     a: (
@@ -15,10 +18,13 @@ const QA: { q: string; a: React.ReactNode }[] = [
         Today it supports Blue Dart; more carriers will follow.
       </>
     ),
+    aText:
+      "A free, open-source tracker for Indian and international couriers. Today it supports Blue Dart; more carriers will follow.",
   },
   {
     q: "How much does it cost?",
     a: <>Nothing. There are no plans, ads, or tracking pixels.</>,
+    aText: "Nothing. There are no plans, ads, or tracking pixels.",
   },
   {
     q: "How often is my shipment checked?",
@@ -29,6 +35,8 @@ const QA: { q: string; a: React.ReactNode }[] = [
         the carrier&apos;s site and just as accurate for non-urgent packages.
       </>
     ),
+    aText:
+      "You pick. The default is every 15 minutes, but each watch can be set anywhere from 15 minutes to 12 hours. Slower intervals are kinder to the carrier's site and just as accurate for non-urgent packages.",
   },
   {
     q: "Can I get notifications without creating an account?",
@@ -39,6 +47,8 @@ const QA: { q: string; a: React.ReactNode }[] = [
         watch to a verified email address.
       </>
     ),
+    aText:
+      "You can view a tracking status without signing up. To save a watch and get email alerts, an account is needed so we can attach the watch to a verified email address.",
   },
   {
     q: "Is my password safe?",
@@ -49,6 +59,8 @@ const QA: { q: string; a: React.ReactNode }[] = [
         never see your raw password. Use a password manager.
       </>
     ),
+    aText:
+      "We store a PBKDF2-SHA256 hash with a per-account random salt (100,000 iterations — the maximum the Cloudflare Workers runtime allows). We never see your raw password. Use a password manager.",
   },
   {
     q: "What happens to a watch after the package is delivered?",
@@ -59,6 +71,8 @@ const QA: { q: string; a: React.ReactNode }[] = [
         cancel it.
       </>
     ),
+    aText:
+      "The watch is automatically marked terminal (delivered / returned) and we stop polling. You can leave it in your dashboard for reference or cancel it.",
   },
   {
     q: "How do I stop getting alerts?",
@@ -69,6 +83,8 @@ const QA: { q: string; a: React.ReactNode }[] = [
         <a href="mailto:aswin@aswincloud.com">aswin@aswincloud.com</a>.
       </>
     ),
+    aText:
+      "Every alert email has a one-click unsubscribe link. You can also cancel a watch from the dashboard, or delete your account by emailing aswin@aswincloud.com.",
   },
   {
     q: "Where does the tracking data come from?",
@@ -79,6 +95,8 @@ const QA: { q: string; a: React.ReactNode }[] = [
         scraping service.
       </>
     ),
+    aText:
+      "For Blue Dart we fetch the public tracking page at bluedart.com. We don't use any paid aggregator or scraping service.",
   },
   {
     q: "Can I add another carrier?",
@@ -89,6 +107,8 @@ const QA: { q: string; a: React.ReactNode }[] = [
         carrier name and a public tracking-page URL.
       </>
     ),
+    aText:
+      "Yes — the carrier system is pluggable. Open an issue or PR on GitHub with the carrier name and a public tracking-page URL.",
   },
   {
     q: "Can I self-host my own copy?",
@@ -100,12 +120,28 @@ const QA: { q: string; a: React.ReactNode }[] = [
         for setup.
       </>
     ),
+    aText:
+      "Absolutely. The code is MIT-licensed and runs on Cloudflare Workers + D1 + Resend. See the README for setup.",
   },
 ];
+
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: QA.map((item) => ({
+    "@type": "Question",
+    name: item.q,
+    acceptedAnswer: { "@type": "Answer", text: item.aText },
+  })),
+};
 
 export default function FaqPage() {
   return (
     <PolicyLayout title="FAQ" subtitle="Common questions about ShipTrack.">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {QA.map((item, i) => (
           <details

@@ -17,9 +17,74 @@ const inter = Inter({
   display: "swap",
 });
 
+const SITE_URL = "https://shiptrack.aswincloud.com";
+const SITE_NAME = "ShipTrack";
+
 export const metadata: Metadata = {
-  title: "ShipTrack — Open shipment tracking",
-  description: "Free, open-source shipment tracking for Indian and international couriers.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "ShipTrack — Free Blue Dart tracking with email alerts",
+    template: "%s · ShipTrack",
+  },
+  description:
+    "Track Blue Dart shipments for free. Paste an AWB / waybill number to see live status and scan history, or sign up to get instant email alerts when your courier moves. Open source, no ads, no signup required to track.",
+  keywords: [
+    "Blue Dart tracking",
+    "Bluedart tracking",
+    "Blue Dart waybill",
+    "AWB tracking India",
+    "courier tracking India",
+    "shipment tracking",
+    "Blue Dart courier status",
+    "track parcel India",
+    "free Bluedart tracker",
+    "Blue Dart email alerts",
+    "open source courier tracker",
+    "ShipTrack",
+  ],
+  applicationName: SITE_NAME,
+  authors: [{ name: "Aswin", url: "https://github.com/Aswincloud" }],
+  creator: "Aswin",
+  publisher: "Aswin",
+  category: "Logistics",
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: SITE_NAME,
+    title: "ShipTrack — Free Blue Dart tracking with email alerts",
+    description:
+      "Track Blue Dart shipments for free. Live status, full scan history, optional email alerts. Open source.",
+    locale: "en_IN",
+    images: [
+      {
+        url: "/apple-icon.svg",
+        width: 180,
+        height: 180,
+        alt: "ShipTrack",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "ShipTrack — Free Blue Dart tracking with email alerts",
+    description:
+      "Track Blue Dart shipments for free. Live status, full scan history, optional email alerts.",
+    images: ["/apple-icon.svg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+    },
+  },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

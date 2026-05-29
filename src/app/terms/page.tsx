@@ -3,7 +3,9 @@ import Link from "next/link";
 import { PolicyLayout, h2Style, pStyle } from "../components/PolicyLayout";
 
 export const metadata: Metadata = {
-  title: "Terms of Use — ShipTrack",
+  title: "Terms of Use",
+  description: "Acceptable use, no warranty, carrier-trademark notice for ShipTrack.",
+  alternates: { canonical: "/terms" },
 };
 
 export default function TermsPage() {
