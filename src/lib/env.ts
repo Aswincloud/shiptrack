@@ -15,6 +15,7 @@ export interface AppEnv {
   MICROSOFT_CLIENT_ID?: string;
   MICROSOFT_CLIENT_SECRET?: string;
   MICROSOFT_TENANT_ID?: string;
+  DELHIVERY_API_TOKEN?: string;
 }
 
 export function getEnv(): AppEnv {

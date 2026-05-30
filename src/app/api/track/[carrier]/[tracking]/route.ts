@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCarrier } from "@/carriers/registry";
 import { CarrierError } from "@/carriers/types";
+import { getEnv } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +15,9 @@ export async function GET(
     return NextResponse.json({ error: "carrier_not_supported", carrier: carrierId }, { status: 404 });
   }
 
+  const env = getEnv();
   try {
-    const result = await carrier.track(tracking);
+    const result = await carrier.track(tracking, { delhiveryToken: env.DELHIVERY_API_TOKEN });
     const { raw: _raw, ...publicResult } = result;
     return NextResponse.json(publicResult, {
       headers: { "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600" },

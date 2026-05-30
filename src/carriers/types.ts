@@ -28,10 +28,20 @@ export interface TrackingResult {
   raw?: unknown;
 }
 
+// Per-request options passed to a carrier. Most carriers ignore this; carriers
+// that need credentials (e.g. Delhivery's token-gated API) read them here so
+// the carrier modules stay free of any environment/Cloudflare coupling.
+export interface TrackOptions {
+  delhiveryToken?: string;
+}
+
 export interface Carrier {
   id: string;
   name: string;
-  track(trackingNumber: string): Promise<TrackingResult>;
+  // Set when the carrier can only track shipments booked under the operator's
+  // own account (not arbitrary public AWBs). Surfaced in the UI as a note.
+  privateOnly?: boolean;
+  track(trackingNumber: string, opts?: TrackOptions): Promise<TrackingResult>;
 }
 
 export class CarrierError extends Error {

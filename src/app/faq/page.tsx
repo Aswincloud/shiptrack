@@ -14,12 +14,14 @@ const QA: { q: string; a: React.ReactNode; aText: string }[] = [
     q: "What is ShipTrack?",
     a: (
       <>
-        A free, open-source tracker for Indian and international couriers.
-        Today it supports Blue Dart; more carriers will follow.
+        A free, open-source courier tracker. Today it supports Blue Dart and
+        Shiprocket (which resolves most Indian couriers — Delhivery, Ekart,
+        XpressBees, DTDC and more), plus Delhivery&apos;s own API for the
+        operator&apos;s shipments. More carriers will follow.
       </>
     ),
     aText:
-      "A free, open-source tracker for Indian and international couriers. Today it supports Blue Dart; more carriers will follow.",
+      "A free, open-source courier tracker. Today it supports Blue Dart and Shiprocket (which resolves most Indian couriers — Delhivery, Ekart, XpressBees, DTDC and more), plus Delhivery's own API for the operator's shipments. More carriers will follow.",
   },
   {
     q: "How much does it cost?",
@@ -90,13 +92,16 @@ const QA: { q: string; a: React.ReactNode; aText: string }[] = [
     q: "Where does the tracking data come from?",
     a: (
       <>
-        For Blue Dart we fetch the public tracking page at{" "}
-        <code>bluedart.com</code>. We don&apos;t use any paid aggregator or
-        scraping service.
+        Blue Dart and Shiprocket are read from their public tracking pages —
+        no paid aggregator. Delhivery is the exception: it has no
+        credential-free public page, so we use Delhivery&apos;s official API,
+        which only returns shipments booked under our own Delhivery account.
+        That means an arbitrary Delhivery AWB won&apos;t resolve here yet — but
+        most Delhivery e-commerce parcels can be tracked via Shiprocket.
       </>
     ),
     aText:
-      "For Blue Dart we fetch the public tracking page at bluedart.com. We don't use any paid aggregator or scraping service.",
+      "Blue Dart and Shiprocket are read from their public tracking pages — no paid aggregator. Delhivery is the exception: it has no credential-free public page, so we use Delhivery's official API, which only returns shipments booked under our own Delhivery account. An arbitrary Delhivery AWB won't resolve here yet, but most Delhivery e-commerce parcels can be tracked via Shiprocket.",
   },
   {
     q: "Can I add another carrier?",

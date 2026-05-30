@@ -11,6 +11,7 @@ interface Env {
   RESEND_API_KEY: string;
   RESEND_FROM: string;
   APP_URL: string;
+  DELHIVERY_API_TOKEN?: string;
 }
 
 const BATCH_SIZE = 50;
@@ -32,7 +33,7 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
 
   let result;
   try {
-    result = await carrier.track(w.tracking_number);
+    result = await carrier.track(w.tracking_number, { delhiveryToken: env.DELHIVERY_API_TOKEN });
   } catch (err) {
     const code = err instanceof CarrierError ? err.code : "unknown";
     console.warn(`poll failed for ${w.id} (${w.carrier}/${w.tracking_number}): ${code}`);
