@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import type { TrackingResult } from "@/carriers/types";
 import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, statusPillStyle, intervalLabel } from "../styles";
 import { IntervalPicker } from "../components/IntervalPicker";
+import { Timeline } from "../components/Timeline";
 
 interface ClientWatch {
   id: string;
@@ -41,6 +43,7 @@ export function DashboardClient({
   const router = useRouter();
   const [watches, setWatches] = useState<ClientWatch[]>(initialWatches);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<ClientWatch | null>(null);
 
   async function cancelWatch(id: string) {
     if (!confirm("Stop alerts for this shipment?")) return;
@@ -132,6 +135,7 @@ export function DashboardClient({
                     }}
                     onCancel={() => cancelWatch(w.id)}
                     onCloseEdit={() => setEditingId(null)}
+                    onView={() => setViewing(w)}
                   />
                 ))}
               </tbody>
@@ -159,7 +163,106 @@ export function DashboardClient({
           Sign out
         </button>
       </div>
+
+      {viewing && <HistoryModal watch={viewing} onClose={() => setViewing(null)} />}
     </main>
+  );
+}
+
+// Fetches the carrier's live scan history on open and shows it in a modal.
+// Reuses the public /api/track endpoint so it reflects the *full* trace, not
+// just the change-events we stored since the watch was created.
+function HistoryModal({ watch, onClose }: { watch: ClientWatch; onClose: () => void }) {
+  const [result, setResult] = useState<TrackingResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    fetch(`/api/track/${encodeURIComponent(watch.carrier)}/${encodeURIComponent(watch.trackingNumber)}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(
+            body.error === "not_found"
+              ? "No tracking info found for this shipment."
+              : body.message || body.error || "Couldn't load tracking.",
+          );
+        }
+        return res.json();
+      })
+      .then((r: TrackingResult) => {
+        if (!cancelled) setResult(r);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Couldn't load tracking.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [watch.carrier, watch.trackingNumber]);
+
+  // Close on Escape.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(15,23,42,0.45)",
+        backdropFilter: "blur(2px)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        padding: "24px 16px",
+        overflowY: "auto",
+        zIndex: 50,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ ...cardStyle, maxWidth: 520, width: "100%", marginTop: 40, padding: 0, overflow: "hidden" }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, padding: "20px 24px", borderBottom: "1px solid var(--border)" }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>
+              <code>{watch.trackingNumber}</code>
+            </div>
+            <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 2, textTransform: "capitalize" }}>
+              {watch.carrier}
+              {result && (
+                <span style={{ ...statusPillStyle(result.status), marginLeft: 8, textTransform: "none" }}>
+                  {result.status.replace(/_/g, " ")}
+                </span>
+              )}
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ ...buttonGhostStyle, padding: "4px 10px", fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ padding: "12px 24px 20px", maxHeight: "60vh", overflowY: "auto" }}>
+          {loading && <div style={{ color: "var(--muted)", fontSize: 14, padding: "12px 0" }}>Loading tracking history…</div>}
+          {error && <div style={{ color: "var(--danger)", fontSize: 14, padding: "12px 0" }}>{error}</div>}
+          {result && !loading && <Timeline events={result.events} />}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -196,6 +299,7 @@ function WatchRow({
   onSave,
   onCancel,
   onCloseEdit,
+  onView,
 }: {
   watch: ClientWatch;
   editing: boolean;
@@ -203,6 +307,7 @@ function WatchRow({
   onSave: (patch: Partial<ClientWatch>) => void;
   onCancel: () => void;
   onCloseEdit: () => void;
+  onView: () => void;
 }) {
   const [label, setLabel] = useState(w.label ?? "");
   const [email, setEmail] = useState(w.email);
@@ -278,6 +383,7 @@ function WatchRow({
       </td>
       <td style={{ ...td, color: "var(--muted)", fontSize: 12 }} data-label="Last poll">{polled}</td>
       <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+        <button type="button" onClick={onView} style={{ ...buttonGhostStyle, padding: "7px 14px", fontSize: 13, marginRight: 4 }}>View</button>
         {w.status !== "cancelled" && (
           <>
             <button type="button" onClick={onEdit} style={{ ...buttonGhostStyle, padding: "7px 14px", fontSize: 13, marginRight: 4 }}>Edit</button>
