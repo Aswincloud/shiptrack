@@ -106,6 +106,7 @@ export function DashboardClient({
           </div>
         ) : (
           <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+           <div style={{ overflowX: "auto" }}>
             <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ background: "var(--neutral-bg)", color: "var(--muted)", fontSize: 11, textAlign: "left", textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -135,6 +136,7 @@ export function DashboardClient({
                 ))}
               </tbody>
             </table>
+           </div>
           </div>
         )}
       </section>
@@ -233,16 +235,16 @@ function WatchRow({
           <div style={{ color: "var(--muted)", fontSize: 12 }}>{w.carrier}</div>
         </td>
         <td style={td} data-label="Label">
-          <input value={label} onChange={(e) => setLabel(e.target.value)} style={{ ...inputStyle, padding: "6px 8px", fontSize: 13, flex: 1 }} />
+          <input value={label} onChange={(e) => setLabel(e.target.value)} style={{ ...inputStyle, padding: "6px 8px", fontSize: 13, width: "100%", minWidth: 0 }} />
         </td>
         <td style={td} data-label="Email">
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" style={{ ...inputStyle, padding: "6px 8px", fontSize: 13, flex: 1 }} />
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" style={{ ...inputStyle, padding: "6px 8px", fontSize: 13, width: "100%", minWidth: 0 }} />
         </td>
         <td style={td} data-label="Status">
           <em style={{ color: "var(--muted)", fontSize: 12 }}>Editing…</em>
         </td>
         <td style={td} data-label="Interval">
-          <IntervalPicker value={interval} onChange={setInterval} />
+          <IntervalPicker value={interval} onChange={setInterval} style={{ width: "100%" }} />
         </td>
         <td style={td} data-label="Last poll">
           <span style={{ color: "var(--muted)", fontSize: 12 }}>—</span>
