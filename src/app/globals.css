@@ -176,4 +176,28 @@ h1, h2, h3 {
     border-top: 1px dashed var(--border) !important;
   }
   .data-table td:last-child::before { display: none; }
+  .data-table td:last-child button {
+    flex: 1 1 auto;
+    min-width: 80px;
+    margin-right: 0 !important;
+  }
+
+  /* In edit mode the cells hold form controls. Stack the label above a
+     full-width control so a select/input can never overflow the card and push
+     the Save/Cancel buttons out of view. */
+  .data-table td:has(input),
+  .data-table td:has(select) {
+    flex-wrap: wrap;
+  }
+  .data-table td:has(input)::before,
+  .data-table td:has(select)::before {
+    flex-basis: 100%;
+    margin-bottom: 4px;
+  }
+  .data-table td input,
+  .data-table td select {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
 }
