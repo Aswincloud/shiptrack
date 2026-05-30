@@ -6,6 +6,7 @@ import type { TrackingResult } from "@/carriers/types";
 import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, statusPillStyle, intervalLabel } from "../styles";
 import { IntervalPicker } from "../components/IntervalPicker";
 import { Timeline } from "../components/Timeline";
+import { ShareButton } from "../components/ShareButton";
 
 interface ClientWatch {
   id: string;
@@ -259,7 +260,19 @@ function HistoryModal({ watch, onClose }: { watch: ClientWatch; onClose: () => v
         <div style={{ padding: "12px 24px 20px", maxHeight: "60vh", overflowY: "auto" }}>
           {loading && <div style={{ color: "var(--muted)", fontSize: 14, padding: "12px 0" }}>Loading tracking history…</div>}
           {error && <div style={{ color: "var(--danger)", fontSize: 14, padding: "12px 0" }}>{error}</div>}
-          {result && !loading && <Timeline events={result.events} />}
+          {result && !loading && (
+            <>
+              <div style={{ marginBottom: 8 }}>
+                <ShareButton
+                  url={`${typeof window !== "undefined" ? window.location.origin : ""}/track/${encodeURIComponent(watch.carrier)}/${encodeURIComponent(watch.trackingNumber)}`}
+                  title={`Track ${watch.trackingNumber}`}
+                  text={`Tracking ${watch.carrier} shipment ${watch.trackingNumber}`}
+                  label="Share tracking"
+                />
+              </div>
+              <Timeline events={result.events} />
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { TrackingResult } from "@/carriers/types";
 import { inputStyle, buttonStyle, cardStyle, statusPillStyle } from "./styles";
 import { Timeline } from "./components/Timeline";
+import { ShareButton } from "./components/ShareButton";
 import { IntervalPicker } from "./components/IntervalPicker";
 
 const DEFAULT_INTERVAL_SECONDS = 15 * 60;
@@ -216,6 +217,13 @@ export default function Home() {
                   Expected delivery: <strong style={{ color: "var(--fg)" }}>{result.estimatedDelivery}</strong>
                 </div>
               )}
+              <div style={{ marginTop: 16 }}>
+                <ShareButton
+                  url={`${typeof window !== "undefined" ? window.location.origin : ""}/track/${encodeURIComponent(result.carrier)}/${encodeURIComponent(result.trackingNumber)}`}
+                  title={`Track ${result.trackingNumber}`}
+                  text={`Tracking ${result.carrier} shipment ${result.trackingNumber} — ${result.status.replace(/_/g, " ")}`}
+                />
+              </div>
             </div>
 
             <div style={{ padding: "8px 24px 20px" }}>
