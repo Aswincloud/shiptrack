@@ -83,7 +83,7 @@ export function estimateStrength(password: string): StrengthResult {
   if (hasRepeats(password)) score = Math.max(0, score - 1);
   if (hasSequence(password)) score = Math.max(0, score - 1);
 
-  score = Math.min(4, Math.max(0, score)) as 0 | 1 | 2 | 3 | 4;
+  const clamped = (Math.min(4, Math.max(0, score)) as 0 | 1 | 2 | 3 | 4);
 
   const labels = ["Very weak", "Weak", "Fair", "Good", "Strong"] as const;
   const reasons: string[] = [];
@@ -93,8 +93,8 @@ export function estimateStrength(password: string): StrengthResult {
   if (hasSequence(password)) reasons.push("avoid sequences like 1234");
 
   return {
-    score,
-    label: labels[score],
+    score: clamped,
+    label: labels[clamped],
     reason: reasons.slice(0, 2).join(" · "),
   };
 }
