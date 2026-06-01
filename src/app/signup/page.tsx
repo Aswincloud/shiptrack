@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { inputStyle, buttonStyle, cardStyle, pageWrapStyle } from "../styles";
 import { SsoButtons } from "../components/SsoButtons";
+import { PasswordStrength } from "../components/PasswordStrength";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -66,7 +67,8 @@ export default function SignupPage() {
             style={inputStyle}
             autoComplete="new-password"
           />
-          <span style={{ color: "var(--muted)", fontSize: 12 }}>At least 8 characters.</span>
+          <PasswordStrength password={password} />
+          <span style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>At least 8 characters.</span>
         </label>
         <button type="submit" disabled={submitting} style={buttonStyle}>
           {submitting ? "Creating…" : "Create account"}

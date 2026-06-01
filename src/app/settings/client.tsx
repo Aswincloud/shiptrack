@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, pageWrapStyle } from "../styles";
+import { PasswordStrength } from "../components/PasswordStrength";
 
 interface Props {
   email: string;
@@ -190,6 +191,7 @@ function PasswordSection({ hasPassword }: { hasPassword: boolean }) {
             autoComplete="new-password"
             style={inputStyle}
           />
+          <PasswordStrength password={next} />
           <span style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>At least 8 characters.</span>
         </label>
         <label style={labelStyle}>

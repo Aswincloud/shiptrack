@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { inputStyle, buttonStyle, cardStyle, pageWrapStyle } from "../styles";
+import { PasswordStrength } from "../components/PasswordStrength";
 
 function ResetInner() {
   const router = useRouter();
@@ -59,16 +60,19 @@ function ResetInner() {
         </div>
       ) : (
         <form onSubmit={handle} style={{ ...cardStyle, display: "flex", flexDirection: "column", gap: 12 }}>
-          <input
-            type="password"
-            required
-            minLength={8}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="New password"
-            style={inputStyle}
-            autoComplete="new-password"
-          />
+          <div>
+            <input
+              type="password"
+              required
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="New password"
+              style={{ ...inputStyle, width: "100%" }}
+              autoComplete="new-password"
+            />
+            <PasswordStrength password={password} />
+          </div>
           <button type="submit" disabled={submitting} style={buttonStyle}>
             {submitting ? "Saving…" : "Update password"}
           </button>
