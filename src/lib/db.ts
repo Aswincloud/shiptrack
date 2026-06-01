@@ -179,7 +179,9 @@ export async function markPolled(
   updates: {
     lastKnownStatus?: string;
     lastEventHash?: string;
-    terminate?: boolean;
+    // Shipment reached a terminal state (delivered/returned). Stops further
+    // polling but is distinct from a user-initiated cancellation.
+    complete?: boolean;
   } = {},
 ): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -193,8 +195,8 @@ export async function markPolled(
     fields.push("last_event_hash = ?");
     values.push(updates.lastEventHash);
   }
-  if (updates.terminate) {
-    fields.push("status = 'cancelled'");
+  if (updates.complete) {
+    fields.push("status = 'completed'");
   }
   values.push(id);
   await db
@@ -431,7 +433,7 @@ export async function listAllUsersForAdmin(db: D1Database): Promise<AdminUserVie
       `SELECT u.id, u.email, u.email_verified, u.is_admin, u.created_at,
               COALESCE(COUNT(w.id), 0) AS watch_count
        FROM users u
-       LEFT JOIN watches w ON w.user_id = u.id AND w.status != 'cancelled'
+       LEFT JOIN watches w ON w.user_id = u.id AND w.status = 'active'
        GROUP BY u.id
        ORDER BY u.created_at DESC`,
     )

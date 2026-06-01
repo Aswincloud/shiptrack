@@ -360,7 +360,14 @@ function WatchRow({
     if (res.ok) onSave({ label: label || null, email, pollIntervalSeconds: interval });
   }
 
-  const statusText = w.status === "cancelled" ? "cancelled" : (w.lastKnownStatus ?? w.status).replace(/_/g, " ");
+  // For both 'cancelled' (user) and 'completed' (poller saw delivered/returned)
+  // we want to show the *outcome* — but cancelled by the user has no useful
+  // last-known status to surface, so we label it explicitly. Completed rows
+  // show the real terminal carrier status (e.g. 'delivered').
+  const statusText =
+    w.status === "cancelled"
+      ? "cancelled"
+      : (w.lastKnownStatus ?? w.status).replace(/_/g, " ");
   const polled = w.lastPolledAt ? new Date(w.lastPolledAt * 1000).toLocaleString() : "—";
 
   if (editing) {
@@ -397,6 +404,7 @@ function WatchRow({
 
   const pillStatus =
     w.status === "cancelled" ? "cancelled" : (w.lastKnownStatus ?? w.status);
+  const isFinished = w.status === "cancelled" || w.status === "completed";
 
   return (
     <tr style={trStyle}>
@@ -415,7 +423,7 @@ function WatchRow({
       <td style={{ ...td, color: "var(--muted)", fontSize: 12 }} data-label="Last poll">{polled}</td>
       <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
         <button type="button" onClick={onView} style={{ ...buttonGhostStyle, padding: "7px 14px", fontSize: 13, marginRight: 4 }}>View</button>
-        {w.status !== "cancelled" && (
+        {!isFinished && (
           <>
             <button type="button" onClick={onEdit} style={{ ...buttonGhostStyle, padding: "7px 14px", fontSize: 13, marginRight: 4 }}>Edit</button>
             <button type="button" onClick={onCancel} style={{ ...buttonGhostStyle, padding: "7px 14px", fontSize: 13, color: "var(--danger)", borderColor: "var(--danger-border)", background: "var(--danger-bg)" }}>Cancel</button>

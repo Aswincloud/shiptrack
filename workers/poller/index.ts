@@ -79,11 +79,11 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
     console.error(`notify failed for ${w.id}:`, err instanceof Error ? err.message : err);
   }
 
-  const terminate = TERMINAL.has(latest.status);
+  const complete = TERMINAL.has(latest.status);
   await markPolled(env.DB, w.id, {
     lastKnownStatus: latest.status,
     lastEventHash: hash,
-    terminate,
+    complete,
   });
 }
 
