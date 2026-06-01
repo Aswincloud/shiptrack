@@ -6,12 +6,19 @@ import { useRouter } from "next/navigation";
 import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, pageWrapStyle } from "../styles";
 import { PasswordStrength } from "../components/PasswordStrength";
 
+interface PendingEmailChange {
+  id: string;
+  requestedEmail: string;
+  createdAt: number;
+}
+
 interface Props {
   email: string;
   name: string | null;
   isAdmin: boolean;
   hasPassword: boolean;
   createdAt: number;
+  initialPendingEmailChange: PendingEmailChange | null;
 }
 
 export function SettingsClient(props: Props) {
@@ -24,7 +31,13 @@ export function SettingsClient(props: Props) {
         Manage your profile, password, and account.
       </p>
 
-      <ProfileSection email={props.email} initialName={props.name} createdAt={props.createdAt} isAdmin={props.isAdmin} />
+      <ProfileSection
+        email={props.email}
+        initialName={props.name}
+        createdAt={props.createdAt}
+        isAdmin={props.isAdmin}
+        initialPendingEmailChange={props.initialPendingEmailChange}
+      />
       <PasswordSection hasPassword={props.hasPassword} />
       <DangerSection hasPassword={props.hasPassword} />
 
@@ -40,15 +53,24 @@ function ProfileSection({
   initialName,
   createdAt,
   isAdmin,
+  initialPendingEmailChange,
 }: {
   email: string;
   initialName: string | null;
   createdAt: number;
   isAdmin: boolean;
+  initialPendingEmailChange: PendingEmailChange | null;
 }) {
   const [name, setName] = useState(initialName ?? "");
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  // Email-change request state, hydrated from the server snapshot.
+  const [pending, setPending] = useState<PendingEmailChange | null>(initialPendingEmailChange);
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [requestedEmail, setRequestedEmail] = useState("");
+  const [emailSubmitting, setEmailSubmitting] = useState(false);
+  const [emailFeedback, setEmailFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -65,6 +87,57 @@ function ProfileSection({
     else setFeedback({ kind: "err", text: "Save failed." });
   }
 
+  async function submitEmailRequest(e: React.FormEvent) {
+    e.preventDefault();
+    setEmailFeedback(null);
+    const target = requestedEmail.trim().toLowerCase();
+    if (!target) return;
+    setEmailSubmitting(true);
+    const res = await fetch("/api/auth/email-change-requests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ requestedEmail: target }),
+    });
+    setEmailSubmitting(false);
+    if (res.ok) {
+      // Re-fetch our snapshot so we show the new pending state.
+      const me = await fetch("/api/auth/email-change-requests").then((r) => r.json()).catch(() => null);
+      if (me?.pending) {
+        setPending({
+          id: me.pending.id,
+          requestedEmail: me.pending.requested_email,
+          createdAt: me.pending.created_at,
+        });
+      }
+      setShowEmailForm(false);
+      setRequestedEmail("");
+      setEmailFeedback({ kind: "ok", text: "Request sent. An admin will review it." });
+      return;
+    }
+    const j = await res.json().catch(() => ({}));
+    const msg =
+      j.error === "same_as_current"
+        ? "That's already your current email."
+        : j.error === "email_taken"
+          ? "That email is already in use by another account."
+          : j.error === "already_pending"
+            ? "You already have a pending request."
+            : "Couldn't submit request.";
+    setEmailFeedback({ kind: "err", text: msg });
+  }
+
+  async function cancelEmailRequest() {
+    if (!pending) return;
+    if (!confirm("Cancel your pending email change request?")) return;
+    const res = await fetch(`/api/auth/email-change-requests/${encodeURIComponent(pending.id)}`, { method: "DELETE" });
+    if (res.ok) {
+      setPending(null);
+      setEmailFeedback({ kind: "ok", text: "Request cancelled." });
+    } else {
+      setEmailFeedback({ kind: "err", text: "Couldn't cancel — refresh and try again." });
+    }
+  }
+
   return (
     <section style={{ ...cardStyle, marginBottom: 20 }}>
       <h2 style={sectionTitle}>Profile</h2>
@@ -72,9 +145,96 @@ function ProfileSection({
         <label style={labelStyle}>
           Email
           <input value={email} disabled style={{ ...inputStyle, opacity: 0.7 }} />
-          <span style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-            Email changes are admin-only for now.
-          </span>
+          {pending ? (
+            <div
+              style={{
+                marginTop: 8,
+                padding: "10px 12px",
+                background: "var(--warning-bg, #fffbeb)",
+                border: "1px solid var(--warning-border, #fde68a)",
+                borderRadius: 8,
+                fontSize: 13,
+                color: "var(--fg-soft)",
+                display: "flex",
+                gap: 10,
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <strong>Pending email change.</strong> An admin will review your request to switch to{" "}
+                <strong>{pending.requestedEmail}</strong> (submitted {new Date(pending.createdAt * 1000).toLocaleDateString()}).
+              </div>
+              <button
+                type="button"
+                onClick={cancelEmailRequest}
+                style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 12, color: "var(--danger)", borderColor: "var(--danger-border)" }}
+              >
+                Cancel request
+              </button>
+            </div>
+          ) : !showEmailForm ? (
+            <button
+              type="button"
+              onClick={() => setShowEmailForm(true)}
+              style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 12, marginTop: 6, alignSelf: "flex-start" }}
+            >
+              Request email change
+            </button>
+          ) : (
+            <div
+              style={{
+                marginTop: 8,
+                padding: 12,
+                background: "var(--neutral-bg, #f8fafc)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+              }}
+            >
+              <form onSubmit={submitEmailRequest} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <label style={{ ...labelStyle, fontSize: 12 }}>
+                  New email address
+                  <input
+                    type="email"
+                    value={requestedEmail}
+                    onChange={(e) => setRequestedEmail(e.target.value)}
+                    required
+                    autoComplete="email"
+                    placeholder="new@example.com"
+                    style={inputStyle}
+                  />
+                </label>
+                <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                  An admin will review your request and you&apos;ll receive an email with the decision.
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="submit"
+                    disabled={emailSubmitting || !requestedEmail.trim()}
+                    style={{ ...buttonStyle, padding: "8px 14px", fontSize: 13 }}
+                  >
+                    {emailSubmitting ? "Sending…" : "Submit request"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEmailForm(false);
+                      setRequestedEmail("");
+                      setEmailFeedback(null);
+                    }}
+                    style={{ ...buttonGhostStyle, padding: "8px 14px", fontSize: 13 }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+          {emailFeedback && (
+            <span style={{ fontSize: 13, marginTop: 6, color: emailFeedback.kind === "ok" ? "var(--success)" : "var(--danger)" }}>
+              {emailFeedback.text}
+            </span>
+          )}
         </label>
         <label style={labelStyle}>
           Display name

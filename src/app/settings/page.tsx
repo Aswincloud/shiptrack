@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
 import { readSessionFromCookies } from "@/lib/auth";
-import { getUserById } from "@/lib/db";
+import { getUserById, getPendingEmailChangeRequestForUser } from "@/lib/db";
 import { SettingsClient } from "./client";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,8 @@ export default async function SettingsPage() {
   const user = await getUserById(env.DB, sess.userId);
   if (!user) redirect("/login");
 
+  const pendingEmailChange = await getPendingEmailChangeRequestForUser(env.DB, user.id);
+
   return (
     <SettingsClient
       email={user.email}
@@ -26,6 +28,15 @@ export default async function SettingsPage() {
       isAdmin={user.is_admin === 1}
       hasPassword={user.password_hash !== OAUTH_ONLY_HASH}
       createdAt={user.created_at}
+      initialPendingEmailChange={
+        pendingEmailChange
+          ? {
+              id: pendingEmailChange.id,
+              requestedEmail: pendingEmailChange.requested_email,
+              createdAt: pendingEmailChange.created_at,
+            }
+          : null
+      }
     />
   );
 }

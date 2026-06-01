@@ -360,6 +360,105 @@ export function passwordResetEmail(args: {
   return { subject, html, text };
 }
 
+export function emailChangeRequestAdminEmail(args: {
+  appUrl: string;
+  userEmail: string;
+  requestedEmail: string;
+  userName?: string | null;
+}): { subject: string; html: string; text: string } {
+  const subject = `Email change request: ${args.userEmail} → ${args.requestedEmail}`;
+  const nameLine = args.userName
+    ? `<p style="margin:0 0 6px;color:#94a3b8;font-size:13px;">From <strong style="color:#0f172a;">${escapeHtml(
+        args.userName,
+      )}</strong></p>`
+    : "";
+  const html = shell({
+    preheader: `${args.userEmail} wants to change their email to ${args.requestedEmail}`,
+    heading: "Email change request",
+    bodyHtml: `
+      ${nameLine}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin:6px 0 14px;">
+        <tr><td style="padding:14px 18px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr><td style="padding:2px 0;color:#94a3b8;font-size:13px;">Current</td><td style="padding:2px 0;color:#0f172a;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(
+              args.userEmail,
+            )}</td></tr>
+            <tr><td style="padding:2px 0;color:#94a3b8;font-size:13px;">Requested</td><td style="padding:2px 0;color:#0f172a;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(
+              args.requestedEmail,
+            )}</td></tr>
+          </table>
+        </td></tr>
+      </table>
+      <p style="margin:0 0 14px;">Approve or reject this from the admin section of the dashboard.</p>
+      ${button(`${args.appUrl}/dashboard`, "Open dashboard")}
+    `,
+  });
+  const text = `Email change requested: ${args.userEmail} → ${args.requestedEmail}. Decide at ${args.appUrl}/dashboard.`;
+  return { subject, html, text };
+}
+
+export function emailChangeApprovedEmail(args: {
+  appUrl: string;
+  oldEmail: string;
+  newEmail: string;
+}): { subject: string; html: string; text: string } {
+  const subject = "Email change approved";
+  const html = shell({
+    preheader: `Your ShipTrack login is now ${args.newEmail}.`,
+    heading: "Email change approved",
+    accent: "#059669",
+    bodyHtml: `
+      <p style="margin:0 0 14px;">Your ShipTrack account email has been updated.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin:4px 0 14px;">
+        <tr><td style="padding:14px 18px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr><td style="padding:2px 0;color:#94a3b8;font-size:13px;">Was</td><td style="padding:2px 0;color:#0f172a;font-size:13px;text-align:right;">${escapeHtml(
+              args.oldEmail,
+            )}</td></tr>
+            <tr><td style="padding:2px 0;color:#94a3b8;font-size:13px;">Now</td><td style="padding:2px 0;color:#0f172a;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(
+              args.newEmail,
+            )}</td></tr>
+          </table>
+        </td></tr>
+      </table>
+      <p style="margin:0 0 6px;">Sign in with your new email address from now on.</p>
+      ${button(`${args.appUrl}/login`, "Sign in")}
+    `,
+  });
+  const text = `Your ShipTrack email is now ${args.newEmail} (was ${args.oldEmail}). Sign in at ${args.appUrl}/login.`;
+  return { subject, html, text };
+}
+
+export function emailChangeRejectedEmail(args: {
+  appUrl: string;
+  requestedEmail: string;
+  reason?: string | null;
+}): { subject: string; html: string; text: string } {
+  const subject = "Email change request rejected";
+  const reasonBlock = args.reason
+    ? `<p style="margin:0 0 14px;color:#475569;font-size:14px;background:#fff1f2;border-left:3px solid #e11d48;padding:10px 14px;border-radius:6px;">${escapeHtml(
+        args.reason,
+      )}</p>`
+    : "";
+  const html = shell({
+    preheader: `Your request to change your email to ${args.requestedEmail} was rejected.`,
+    heading: "Email change rejected",
+    accent: "#e11d48",
+    bodyHtml: `
+      <p style="margin:0 0 14px;">Your request to change your account email to <strong>${escapeHtml(
+        args.requestedEmail,
+      )}</strong> was rejected by an admin.</p>
+      ${reasonBlock}
+      <p style="margin:0 0 6px;">You can submit a new request from your settings page.</p>
+      ${button(`${args.appUrl}/settings`, "Open settings")}
+    `,
+  });
+  const text = `Your request to change your email to ${args.requestedEmail} was rejected.${
+    args.reason ? " Reason: " + args.reason : ""
+  } Try again at ${args.appUrl}/settings.`;
+  return { subject, html, text };
+}
+
 function humanStatus(s: string): string {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }

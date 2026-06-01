@@ -251,6 +251,113 @@ export async function markEmailVerified(db: D1Database, userId: string): Promise
   await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = ?`).bind(userId).run();
 }
 
+// --- Email change requests ---
+
+export interface EmailChangeRequestRow {
+  id: string;
+  user_id: string;
+  current_email: string;
+  requested_email: string;
+  status: "pending" | "approved" | "rejected" | "cancelled";
+  reason: string | null;
+  decided_by_user_id: string | null;
+  decided_at: number | null;
+  created_at: number;
+}
+
+export interface AdminEmailChangeRequestView extends EmailChangeRequestRow {
+  user_email: string;
+  user_name: string | null;
+}
+
+export async function createEmailChangeRequest(
+  db: D1Database,
+  args: { userId: string; currentEmail: string; requestedEmail: string },
+): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO email_change_requests (id, user_id, current_email, requested_email, status, created_at)
+       VALUES (?, ?, ?, ?, 'pending', ?)`,
+    )
+    .bind(id, args.userId, args.currentEmail, args.requestedEmail.toLowerCase(), now)
+    .run();
+  return id;
+}
+
+export async function getPendingEmailChangeRequestForUser(
+  db: D1Database,
+  userId: string,
+): Promise<EmailChangeRequestRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT * FROM email_change_requests WHERE user_id = ? AND status = 'pending' LIMIT 1`,
+    )
+    .bind(userId)
+    .first<EmailChangeRequestRow>();
+  return row ?? null;
+}
+
+export async function cancelEmailChangeRequestForUser(
+  db: D1Database,
+  userId: string,
+  requestId: string,
+): Promise<boolean> {
+  const now = Math.floor(Date.now() / 1000);
+  const res = await db
+    .prepare(
+      `UPDATE email_change_requests
+       SET status = 'cancelled', decided_at = ?
+       WHERE id = ? AND user_id = ? AND status = 'pending'`,
+    )
+    .bind(now, requestId, userId)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+export async function listPendingEmailChangeRequests(
+  db: D1Database,
+): Promise<AdminEmailChangeRequestView[]> {
+  const res = await db
+    .prepare(
+      `SELECT r.*, u.email AS user_email, u.name AS user_name
+       FROM email_change_requests r
+       INNER JOIN users u ON u.id = r.user_id
+       WHERE r.status = 'pending'
+       ORDER BY r.created_at ASC`,
+    )
+    .all<AdminEmailChangeRequestView>();
+  return res.results ?? [];
+}
+
+export async function getEmailChangeRequestById(
+  db: D1Database,
+  id: string,
+): Promise<EmailChangeRequestRow | null> {
+  const row = await db
+    .prepare(`SELECT * FROM email_change_requests WHERE id = ?`)
+    .bind(id)
+    .first<EmailChangeRequestRow>();
+  return row ?? null;
+}
+
+export async function decideEmailChangeRequest(
+  db: D1Database,
+  args: { id: string; adminId: string; status: "approved" | "rejected"; reason?: string | null },
+): Promise<boolean> {
+  const now = Math.floor(Date.now() / 1000);
+  const res = await db
+    .prepare(
+      `UPDATE email_change_requests
+       SET status = ?, decided_by_user_id = ?, decided_at = ?, reason = ?
+       WHERE id = ? AND status = 'pending'`,
+    )
+    .bind(args.status, args.adminId, now, args.reason ?? null, args.id)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
 // Trim to 80 chars; empty becomes NULL so the user can clear their name.
 export async function updateUserName(
   db: D1Database,
