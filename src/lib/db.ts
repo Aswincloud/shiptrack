@@ -24,6 +24,7 @@ export interface UserRow {
   resend_api_key: string | null;
   created_at: number;
   is_admin: number;
+  name: string | null;
 }
 
 export interface AdminUserView {
@@ -248,6 +249,16 @@ export async function getUserById(db: D1Database, id: string): Promise<UserRow |
 
 export async function markEmailVerified(db: D1Database, userId: string): Promise<void> {
   await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = ?`).bind(userId).run();
+}
+
+// Trim to 80 chars; empty becomes NULL so the user can clear their name.
+export async function updateUserName(
+  db: D1Database,
+  userId: string,
+  name: string | null,
+): Promise<void> {
+  const cleaned = name ? name.trim().slice(0, 80) : "";
+  await db.prepare(`UPDATE users SET name = ? WHERE id = ?`).bind(cleaned || null, userId).run();
 }
 
 export async function updateUserPasswordHash(
