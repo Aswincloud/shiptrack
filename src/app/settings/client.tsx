@@ -141,101 +141,107 @@ function ProfileSection({
   return (
     <section style={{ ...cardStyle, marginBottom: 20 }}>
       <h2 style={sectionTitle}>Profile</h2>
-      <form onSubmit={save} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <label style={labelStyle}>
-          Email
-          <input value={email} disabled style={{ ...inputStyle, opacity: 0.7 }} />
-          {pending ? (
-            <div
-              style={{
-                marginTop: 8,
-                padding: "10px 12px",
-                background: "var(--warning-bg, #fffbeb)",
-                border: "1px solid var(--warning-border, #fde68a)",
-                borderRadius: 8,
-                fontSize: 13,
-                color: "var(--fg-soft)",
-                display: "flex",
-                gap: 10,
-                alignItems: "flex-start",
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <strong>Pending email change.</strong> An admin will review your request to switch to{" "}
-                <strong>{pending.requestedEmail}</strong> (submitted {new Date(pending.createdAt * 1000).toLocaleDateString()}).
-              </div>
-              <button
-                type="button"
-                onClick={cancelEmailRequest}
-                style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 12, color: "var(--danger)", borderColor: "var(--danger-border)" }}
-              >
-                Cancel request
-              </button>
+
+      {/* Email block — kept OUTSIDE the name <form> so the inner request <form>
+          isn't nested (nested forms are illegal HTML and React/the browser
+          unnests them, which would route the "Submit request" button to the
+          wrong handler — exactly the bug we hit). */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+        <label style={labelStyle}>Email</label>
+        <input value={email} disabled style={{ ...inputStyle, opacity: 0.7 }} />
+        {pending ? (
+          <div
+            style={{
+              marginTop: 8,
+              padding: "10px 12px",
+              background: "var(--warning-bg, #fffbeb)",
+              border: "1px solid var(--warning-border, #fde68a)",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "var(--fg-soft)",
+              display: "flex",
+              gap: 10,
+              alignItems: "flex-start",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <strong>Pending email change.</strong> An admin will review your request to switch to{" "}
+              <strong>{pending.requestedEmail}</strong> (submitted {new Date(pending.createdAt * 1000).toLocaleDateString()}).
             </div>
-          ) : !showEmailForm ? (
             <button
               type="button"
-              onClick={() => setShowEmailForm(true)}
-              style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 12, marginTop: 6, alignSelf: "flex-start" }}
+              onClick={cancelEmailRequest}
+              style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 12, color: "var(--danger)", borderColor: "var(--danger-border)" }}
             >
-              Request email change
+              Cancel request
             </button>
-          ) : (
-            <div
-              style={{
-                marginTop: 8,
-                padding: 12,
-                background: "var(--neutral-bg, #f8fafc)",
-                border: "1px solid var(--border)",
-                borderRadius: 8,
-              }}
-            >
-              <form onSubmit={submitEmailRequest} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <label style={{ ...labelStyle, fontSize: 12 }}>
-                  New email address
-                  <input
-                    type="email"
-                    value={requestedEmail}
-                    onChange={(e) => setRequestedEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                    placeholder="new@example.com"
-                    style={inputStyle}
-                  />
-                </label>
-                <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                  An admin will review your request and you&apos;ll receive an email with the decision.
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    type="submit"
-                    disabled={emailSubmitting || !requestedEmail.trim()}
-                    style={{ ...buttonStyle, padding: "8px 14px", fontSize: 13 }}
-                  >
-                    {emailSubmitting ? "Sending…" : "Submit request"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEmailForm(false);
-                      setRequestedEmail("");
-                      setEmailFeedback(null);
-                    }}
-                    style={{ ...buttonGhostStyle, padding: "8px 14px", fontSize: 13 }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-          {emailFeedback && (
-            <span style={{ fontSize: 13, marginTop: 6, color: emailFeedback.kind === "ok" ? "var(--success)" : "var(--danger)" }}>
-              {emailFeedback.text}
-            </span>
-          )}
-        </label>
+          </div>
+        ) : !showEmailForm ? (
+          <button
+            type="button"
+            onClick={() => setShowEmailForm(true)}
+            style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 12, marginTop: 6, alignSelf: "flex-start" }}
+          >
+            Request email change
+          </button>
+        ) : (
+          <div
+            style={{
+              marginTop: 8,
+              padding: 12,
+              background: "var(--neutral-bg, #f8fafc)",
+              border: "1px solid var(--border)",
+              borderRadius: 8,
+            }}
+          >
+            <form onSubmit={submitEmailRequest} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label style={{ ...labelStyle, fontSize: 12 }}>
+                New email address
+                <input
+                  type="email"
+                  value={requestedEmail}
+                  onChange={(e) => setRequestedEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  placeholder="new@example.com"
+                  style={inputStyle}
+                />
+              </label>
+              <div style={{ fontSize: 12, color: "var(--muted)" }}>
+                An admin will review your request and you&apos;ll receive an email with the decision.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="submit"
+                  disabled={emailSubmitting || !requestedEmail.trim()}
+                  style={{ ...buttonStyle, padding: "8px 14px", fontSize: 13 }}
+                >
+                  {emailSubmitting ? "Sending…" : "Submit request"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEmailForm(false);
+                    setRequestedEmail("");
+                    setEmailFeedback(null);
+                  }}
+                  style={{ ...buttonGhostStyle, padding: "8px 14px", fontSize: 13 }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+        {emailFeedback && (
+          <span style={{ fontSize: 13, marginTop: 6, color: emailFeedback.kind === "ok" ? "var(--success)" : "var(--danger)" }}>
+            {emailFeedback.text}
+          </span>
+        )}
+      </div>
+
+      <form onSubmit={save} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <label style={labelStyle}>
           Display name
           <input
