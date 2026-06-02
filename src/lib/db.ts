@@ -7,12 +7,13 @@ export interface WatchRow {
   carrier: string;
   tracking_number: string;
   label: string | null;
-  status: "pending" | "active" | "cancelled";
+  status: "pending" | "active" | "cancelled" | "completed";
   last_known_status: string | null;
   last_event_hash: string | null;
   last_polled_at: number | null;
   created_at: number;
   confirmed_at: number | null;
+  completed_at: number | null;
   poll_interval_seconds: number;
 }
 
@@ -197,12 +198,45 @@ export async function markPolled(
   }
   if (updates.complete) {
     fields.push("status = 'completed'");
+    // Stamp completion time only on the transition (COALESCE keeps the original
+    // if this watch was somehow re-polled while already completed).
+    fields.push("completed_at = COALESCE(completed_at, ?)");
+    values.push(now);
   }
   values.push(id);
   await db
     .prepare(`UPDATE watches SET ${fields.join(", ")} WHERE id = ?`)
     .bind(...values)
     .run();
+}
+
+// Permanently delete watches that completed (delivered/returned) more than
+// `graceSeconds` ago, along with their events. Returns the number removed.
+export async function purgeDeliveredWatches(
+  db: D1Database,
+  now: number,
+  graceSeconds: number,
+): Promise<number> {
+  const cutoff = now - graceSeconds;
+  const stale = await db
+    .prepare(
+      `SELECT id FROM watches
+       WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at <= ?`,
+    )
+    .bind(cutoff)
+    .all<{ id: string }>();
+  const ids = (stale.results ?? []).map((r) => r.id);
+  if (ids.length === 0) return 0;
+
+  // Delete events explicitly — D1 doesn't enforce ON DELETE CASCADE unless
+  // PRAGMA foreign_keys is on, which isn't guaranteed per-connection.
+  const placeholders = ids.map(() => "?").join(",");
+  await db.prepare(`DELETE FROM events WHERE watch_id IN (${placeholders})`).bind(...ids).run();
+  const res = await db
+    .prepare(`DELETE FROM watches WHERE id IN (${placeholders})`)
+    .bind(...ids)
+    .run();
+  return res.meta?.changes ?? 0;
 }
 
 export async function recordEvent(

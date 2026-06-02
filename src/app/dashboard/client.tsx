@@ -18,8 +18,12 @@ interface ClientWatch {
   lastKnownStatus: string | null;
   lastPolledAt: number | null;
   createdAt: number;
+  completedAt: number | null;
   pollIntervalSeconds: number;
 }
+
+// Delivered/returned watches are auto-removed this long after completion.
+const PURGE_GRACE_DAYS = 7;
 
 interface AdminUser {
   id: string;
@@ -406,6 +410,15 @@ function WatchRow({
     w.status === "cancelled" ? "cancelled" : (w.lastKnownStatus ?? w.status);
   const isFinished = w.status === "cancelled" || w.status === "completed";
 
+  // Days left before a completed watch is auto-removed (whole days, min 0).
+  const purgeDaysLeft =
+    w.status === "completed" && w.completedAt != null
+      ? Math.max(
+          0,
+          PURGE_GRACE_DAYS - Math.floor((Date.now() / 1000 - w.completedAt) / 86400),
+        )
+      : null;
+
   return (
     <tr style={trStyle}>
       <td style={td}>
@@ -416,6 +429,11 @@ function WatchRow({
       <td style={td} data-label="Email"><span style={{ color: "var(--muted)" }}>{w.email}</span></td>
       <td style={td} data-label="Status">
         <span style={statusPillStyle(pillStatus)}>{statusText}</span>
+        {purgeDaysLeft !== null && (
+          <div style={{ color: "var(--muted-soft)", fontSize: 11, marginTop: 3 }}>
+            auto-removes in {purgeDaysLeft === 0 ? "<1 day" : `${purgeDaysLeft} day${purgeDaysLeft === 1 ? "" : "s"}`}
+          </div>
+        )}
       </td>
       <td style={{ ...td, color: "var(--muted)", fontSize: 12 }} data-label="Interval">
         {intervalLabel(w.pollIntervalSeconds)}

@@ -1,5 +1,5 @@
 import type { D1Database, ScheduledController, ExecutionContext } from "@cloudflare/workers-types";
-import { listDueWatches, markPolled, recordEvent, type WatchRow } from "../../src/lib/db";
+import { listDueWatches, markPolled, recordEvent, purgeDeliveredWatches, type WatchRow } from "../../src/lib/db";
 import { signToken } from "../../src/lib/tokens";
 import { getCarrier } from "../../src/carriers/registry";
 import { emailResend } from "../../src/notifiers/email-resend";
@@ -16,6 +16,8 @@ interface Env {
 
 const BATCH_SIZE = 50;
 const TERMINAL = new Set(["delivered", "returned"]);
+// Delivered/returned watches are purged this long after completion.
+const PURGE_GRACE_SECONDS = 7 * 24 * 60 * 60;
 
 async function sha256Hex(input: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
@@ -90,6 +92,17 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
 export default {
   async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const now = Math.floor(Date.now() / 1000);
+
+    // Sweep delivered/returned watches past their grace window. Best-effort —
+    // a failure here must never block the polling run.
+    ctx.waitUntil(
+      purgeDeliveredWatches(env.DB, now, PURGE_GRACE_SECONDS)
+        .then((n) => {
+          if (n > 0) console.log(`purged ${n} delivered watches`);
+        })
+        .catch((e) => console.error("purge failed:", e instanceof Error ? e.message : e)),
+    );
+
     const due = await listDueWatches(env.DB, now, BATCH_SIZE);
     if (due.length === 0) return;
     console.log(`polling ${due.length} watches`);

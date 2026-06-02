@@ -61,6 +61,7 @@ function serializeWatch(w: WatchRow) {
     lastKnownStatus: w.last_known_status,
     lastPolledAt: w.last_polled_at,
     createdAt: w.created_at,
+    completedAt: w.completed_at,
     pollIntervalSeconds: w.poll_interval_seconds,
   };
 }
