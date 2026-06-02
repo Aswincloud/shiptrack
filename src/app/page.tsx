@@ -10,24 +10,41 @@ import { IntervalPicker } from "./components/IntervalPicker";
 
 const DEFAULT_INTERVAL_SECONDS = 15 * 60;
 
+const CARRIER_LABELS: Record<string, string> = {
+  bluedart: "Blue Dart",
+  shiprocket: "Shiprocket",
+  delhivery: "Delhivery",
+};
+function labelForCarrier(id: string): string {
+  return CARRIER_LABELS[id] ?? id;
+}
+
 export default function Home() {
   const [carrier, setCarrier] = useState("bluedart");
   const [tracking, setTracking] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TrackingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // When a track comes back not_found, remember the (carrier, tracking) the
+  // user typed so we can offer to pre-watch it before the carrier ingests it.
+  const [notFound, setNotFound] = useState<{ carrier: string; tracking: string } | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!tracking.trim()) return;
+    const cleaned = tracking.trim();
+    if (!cleaned) return;
     setLoading(true);
     setError(null);
     setResult(null);
+    setNotFound(null);
     try {
-      const res = await fetch(`/api/track/${encodeURIComponent(carrier)}/${encodeURIComponent(tracking.trim())}`);
+      const res = await fetch(`/api/track/${encodeURIComponent(carrier)}/${encodeURIComponent(cleaned)}`);
       const body = await res.json();
       if (!res.ok) {
         setError(body.message ?? body.error ?? "Request failed");
+        // A not_found AWB is often just one the carrier hasn't scanned yet —
+        // offer to watch it so the user gets alerted once it appears.
+        if (body.error === "not_found") setNotFound({ carrier, tracking: cleaned });
       } else {
         setResult(body);
       }
@@ -184,6 +201,30 @@ export default function Home() {
         </div>
       )}
 
+      {notFound && (
+        <div style={{ ...cardStyle, padding: 0, overflow: "hidden", marginBottom: 8 }}>
+          <div
+            style={{
+              padding: "16px 20px",
+              background: "var(--accent-soft)",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
+              Not in {labelForCarrier(notFound.carrier)}&rsquo;s system yet
+            </div>
+            <div style={{ fontSize: 13, color: "var(--fg-soft)", lineHeight: 1.5 }}>
+              Freshly-booked shipments can take a few hours to a day to appear. Add
+              it to your watchlist and we&rsquo;ll email you the moment it shows up
+              and on every change after.
+            </div>
+          </div>
+          <div style={{ padding: "4px 4px 0" }}>
+            <NotifyForm carrier={notFound.carrier} trackingNumber={notFound.tracking} embedded />
+          </div>
+        </div>
+      )}
+
       {result && (
         <>
           <div style={{ ...cardStyle, padding: 0, overflow: "hidden", boxShadow: "var(--shadow-md)" }}>
@@ -257,7 +298,18 @@ interface Me {
   email: string;
 }
 
-function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumber: string }) {
+function NotifyForm({
+  carrier,
+  trackingNumber,
+  embedded = false,
+}: {
+  carrier: string;
+  trackingNumber: string;
+  embedded?: boolean;
+}) {
+  // When embedded inside another card (e.g. the pre-track prompt), shed our own
+  // card chrome so we don't double up borders/background.
+  const outerStyle = embedded ? { padding: 16 } : { ...cardStyle, marginTop: 16 };
   const [me, setMe] = useState<Me | null | undefined>(undefined);
   const [email, setEmail] = useState("");
   const [label, setLabel] = useState("");
@@ -312,10 +364,9 @@ function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumb
     return (
       <div
         style={{
-          ...cardStyle,
-          marginTop: 16,
+          ...outerStyle,
           textAlign: "center",
-          background: "linear-gradient(135deg, var(--accent-soft) 0%, #faf5ff 100%)",
+          background: embedded ? "transparent" : "linear-gradient(135deg, var(--accent-soft) 0%, #faf5ff 100%)",
           borderColor: "var(--accent-soft)",
         }}
       >
@@ -361,7 +412,7 @@ function NotifyForm({ carrier, trackingNumber }: { carrier: string; trackingNumb
   }
 
   return (
-    <div style={{ ...cardStyle, marginTop: 16 }}>
+    <div style={outerStyle}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
         <span
           aria-hidden

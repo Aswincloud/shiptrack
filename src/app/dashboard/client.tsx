@@ -61,6 +61,12 @@ export function DashboardClient({
   const [watches, setWatches] = useState<ClientWatch[]>(initialWatches);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ClientWatch | null>(null);
+  const [showDone, setShowDone] = useState(false);
+
+  // Active (pending/active) shipments stay in the main list; finished ones
+  // (completed/cancelled) drop into the collapsed "Delivered" section.
+  const activeWatches = watches.filter((w) => w.status === "pending" || w.status === "active");
+  const doneWatches = watches.filter((w) => w.status === "completed" || w.status === "cancelled");
 
   async function cancelWatch(id: string) {
     if (!confirm("Stop alerts for this shipment?")) return;
@@ -114,7 +120,7 @@ export function DashboardClient({
 
       <section style={{ marginBottom: 32 }}>
         <h2 style={sectionTitle}>
-          Your watches <span style={countBadge}>{watches.length}</span>
+          Your watches <span style={countBadge}>{activeWatches.length}</span>
         </h2>
         {watches.length === 0 ? (
           <div style={{ ...cardStyle, textAlign: "center", padding: "48px 24px" }}>
@@ -124,43 +130,59 @@ export function DashboardClient({
               <a href="/">Track a shipment</a> and click &ldquo;Notify me on changes&rdquo; to add one.
             </div>
           </div>
-        ) : (
-          <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-           <div style={{ overflowX: "auto" }}>
-            <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead>
-                <tr style={{ background: "var(--neutral-bg)", color: "var(--muted)", fontSize: 11, textAlign: "left", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  <th style={th}>Tracking</th>
-                  <th style={th}>Label</th>
-                  <th style={th}>Notify email</th>
-                  <th style={th}>Status</th>
-                  <th style={th}>Interval</th>
-                  <th style={th}>Last poll</th>
-                  <th style={th}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {watches.map((w) => (
-                  <WatchRow
-                    key={w.id}
-                    watch={w}
-                    editing={editingId === w.id}
-                    onEdit={() => setEditingId(w.id)}
-                    onSave={(patch) => {
-                      setWatches((ws) => ws.map((x) => (x.id === w.id ? { ...x, ...patch } : x)));
-                      setEditingId(null);
-                    }}
-                    onCancel={() => cancelWatch(w.id)}
-                    onCloseEdit={() => setEditingId(null)}
-                    onView={() => setViewing(w)}
-                  />
-                ))}
-              </tbody>
-            </table>
-           </div>
+        ) : activeWatches.length === 0 ? (
+          <div style={{ ...cardStyle, textAlign: "center", padding: "32px 24px" }}>
+            <div style={{ fontWeight: 600, marginBottom: 4 }}>All caught up 🎉</div>
+            <div style={{ color: "var(--muted)", fontSize: 14 }}>
+              No active shipments. Delivered ones are below.
+            </div>
           </div>
+        ) : (
+          <WatchTable
+            watches={activeWatches}
+            editingId={editingId}
+            setEditingId={setEditingId}
+            setWatches={setWatches}
+            cancelWatch={cancelWatch}
+            setViewing={setViewing}
+          />
         )}
       </section>
+
+      {doneWatches.length > 0 && (
+        <section style={{ marginBottom: 32 }}>
+          <button
+            type="button"
+            onClick={() => setShowDone((s) => !s)}
+            style={{
+              ...sectionTitle,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              padding: 0,
+            }}
+            aria-expanded={showDone}
+          >
+            <span style={{ transition: "transform 0.15s", transform: showDone ? "rotate(90deg)" : "none" }}>▸</span>
+            Delivered <span style={countBadge}>{doneWatches.length}</span>
+          </button>
+          {showDone && (
+            <div style={{ marginTop: 12 }}>
+              <WatchTable
+                watches={doneWatches}
+                editingId={editingId}
+                setEditingId={setEditingId}
+                setWatches={setWatches}
+                cancelWatch={cancelWatch}
+                setViewing={setViewing}
+              />
+            </div>
+          )}
+        </section>
+      )}
 
       {isAdmin && pendingEmailChangeRequests && pendingEmailChangeRequests.length > 0 && (
         <section style={{ marginTop: 32 }}>
@@ -189,6 +211,61 @@ export function DashboardClient({
 
       {viewing && <HistoryModal watch={viewing} onClose={() => setViewing(null)} />}
     </main>
+  );
+}
+
+// Shared table used for both the active list and the collapsed "Delivered"
+// section, so the two render identically.
+function WatchTable({
+  watches,
+  editingId,
+  setEditingId,
+  setWatches,
+  cancelWatch,
+  setViewing,
+}: {
+  watches: ClientWatch[];
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
+  setWatches: React.Dispatch<React.SetStateAction<ClientWatch[]>>;
+  cancelWatch: (id: string) => void;
+  setViewing: (w: ClientWatch | null) => void;
+}) {
+  return (
+    <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+      <div style={{ overflowX: "auto" }}>
+        <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+          <thead>
+            <tr style={{ background: "var(--neutral-bg)", color: "var(--muted)", fontSize: 11, textAlign: "left", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              <th style={th}>Tracking</th>
+              <th style={th}>Label</th>
+              <th style={th}>Notify email</th>
+              <th style={th}>Status</th>
+              <th style={th}>Interval</th>
+              <th style={th}>Last poll</th>
+              <th style={th}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {watches.map((w) => (
+              <WatchRow
+                key={w.id}
+                watch={w}
+                editing={editingId === w.id}
+                onEdit={() => setEditingId(w.id)}
+                onSave={(patch) => {
+                  setWatches((ws) => ws.map((x) => (x.id === w.id ? { ...x, ...patch } : x)));
+                  setEditingId(null);
+                }}
+                onCancel={() => cancelWatch(w.id)}
+                onCloseEdit={() => setEditingId(null)}
+                onView={() => setViewing(w)}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -371,7 +448,11 @@ function WatchRow({
   const statusText =
     w.status === "cancelled"
       ? "cancelled"
-      : (w.lastKnownStatus ?? w.status).replace(/_/g, " ");
+      : w.lastKnownStatus
+        ? w.lastKnownStatus.replace(/_/g, " ")
+        : // Active watch with no scan yet — e.g. a pre-tracked AWB the carrier
+          // hasn't ingested. Make that explicit rather than showing "active".
+          "awaiting first scan";
   const polled = w.lastPolledAt ? new Date(w.lastPolledAt * 1000).toLocaleString() : "—";
 
   if (editing) {
