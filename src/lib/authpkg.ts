@@ -7,9 +7,30 @@
 // via the render* overrides the routes pass in).
 
 import type { OAuthConfig } from "@aswincloud/auth";
+import { emailAllowed, parseAccessMode } from "@aswincloud/auth";
 import type { EmailSender } from "@aswincloud/auth/d1";
 import type { AppEnv } from "./env";
 import { sendEmail } from "./email";
+
+/**
+ * Apply this site's access policy to a candidate email (signup / first OAuth
+ * login). Gates *account creation* only — existing users are never re-gated.
+ *
+ * Unlike the package default (which fails closed to "owners"), shiptrack fails
+ * OPEN to "public" when ACCESS_MODE is unset, preserving its historical
+ * open-signup behavior. Set ACCESS_MODE=domain (+ACCESS_DOMAINS) or
+ * ACCESS_MODE=owners (+OWNER_EMAILS) to restrict.
+ */
+export function emailAllowedForSite(env: AppEnv, email: string): boolean {
+  const raw = (env.ACCESS_MODE ?? "").trim();
+  if (!raw) return !!email; // default: public — any non-empty email
+  return emailAllowed({
+    mode: parseAccessMode(raw),
+    email,
+    owners: env.OWNER_EMAILS,
+    domains: env.ACCESS_DOMAINS,
+  });
+}
 
 // Cookie names kept identical to the pre-migration values so any in-flight
 // OAuth round-trip and every existing session survive the swap untouched.

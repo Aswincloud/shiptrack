@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getEnv } from "@/lib/env";
 import { getUserByEmail, listAdminEmails } from "@/lib/db";
 import { signup } from "@aswincloud/auth/d1";
-import { makeSendEmail } from "@/lib/authpkg";
+import { makeSendEmail, emailAllowedForSite } from "@/lib/authpkg";
 import { sendEmail, otpEmail, newSignupAdminEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +25,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
   const email = parsed.data.email.toLowerCase();
+
+  // Access policy: does this email satisfy the site's signup gate? Default is
+  // "public" (open) unless ACCESS_MODE restricts it. Checked before any DB read
+  // so a disallowed email reveals nothing about existing accounts.
+  if (!emailAllowedForSite(env, email)) {
+    return NextResponse.json({ error: "not_allowed" }, { status: 403 });
+  }
 
   // Anti-enumeration: a verified account already exists → generic pending, no
   // password reset / email. (The flow would re-send a code to a verified user.)

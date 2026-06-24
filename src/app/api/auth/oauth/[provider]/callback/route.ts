@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
 import { handleOAuthCallback, clearStateCookie, type ProviderId } from "@aswincloud/auth";
 import { OAUTH_ONLY_HASH } from "@aswincloud/auth/d1";
-import { oauthConfig } from "@/lib/authpkg";
+import { oauthConfig, emailAllowedForSite } from "@/lib/authpkg";
 import {
   createUser,
   getUserByEmail,
@@ -60,6 +60,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ provider: s
 
   // 3. Brand-new user: create the row (OAuth-only sentinel hash) + link identity.
   if (!user) {
+    // Access policy gates account *creation* only — returning users (steps 1-2)
+    // are never re-gated. Default mode is "public" (open) unless ACCESS_MODE set.
+    if (!emailAllowedForSite(env, lowerEmail)) return errorRedirect(env, cfg, "not_allowed");
     const id = crypto.randomUUID();
     await createUser(env.DB, { id, email: lowerEmail, passwordHash: OAUTH_ONLY_HASH });
     await markEmailVerified(env.DB, id);
