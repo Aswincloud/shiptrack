@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { getUserByEmail, getOtp, deleteOtp, incrementOtpAttempts, markEmailVerified } from "@/lib/db";
-import { hashOtp, constantTimeEqualString, OTP_MAX_ATTEMPTS } from "@/lib/otp";
+import { verifyOtp } from "@aswincloud/auth/d1";
 import { createSessionCookie } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -23,37 +22,21 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
-  const email = parsed.data.email.toLowerCase();
-  const code = parsed.data.code;
 
-  const otp = await getOtp(env.DB, email);
-  if (!otp) return NextResponse.json({ error: "invalid_code" }, { status: 400 });
-
-  if (otp.attempts >= OTP_MAX_ATTEMPTS) {
-    await deleteOtp(env.DB, email);
-    return NextResponse.json({ error: "too_many_attempts" }, { status: 429 });
+  const r = await verifyOtp(env.DB, {
+    email: parsed.data.email.toLowerCase(),
+    code: parsed.data.code,
+    secret: env.TOKEN_SECRET,
+  });
+  if (!r.ok) {
+    const status = r.error === "too_many_attempts" ? 429 : 400;
+    // "no_account"/"expired" both surface as recoverable client errors, same as before.
+    return NextResponse.json({ error: r.error }, { status });
   }
 
-  if (otp.expires_at < Math.floor(Date.now() / 1000)) {
-    await deleteOtp(env.DB, email);
-    return NextResponse.json({ error: "expired" }, { status: 400 });
-  }
-
-  const candidate = await hashOtp(code, env.TOKEN_SECRET);
-  if (!constantTimeEqualString(candidate, otp.code_hash)) {
-    await incrementOtpAttempts(env.DB, email);
-    return NextResponse.json({ error: "invalid_code" }, { status: 400 });
-  }
-
-  const user = await getUserByEmail(env.DB, email);
-  if (!user) return NextResponse.json({ error: "no_account" }, { status: 400 });
-
-  await markEmailVerified(env.DB, user.id);
-  await deleteOtp(env.DB, email);
-
-  const cookie = await createSessionCookie(env.TOKEN_SECRET, user.id);
+  const cookie = await createSessionCookie(env.TOKEN_SECRET, r.userId);
   return NextResponse.json(
-    { userId: user.id, email: user.email },
+    { userId: r.userId, email: r.email },
     { status: 200, headers: { "Set-Cookie": cookie } },
   );
 }

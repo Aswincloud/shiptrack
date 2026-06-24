@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { getUserByEmail, upsertOtp } from "@/lib/db";
-import { verifyPassword } from "@/lib/passwords";
+import { getUserByEmail } from "@/lib/db";
+import { verifyPassword } from "@aswincloud/auth";
+import { resendOtp } from "@aswincloud/auth/d1";
 import { createSessionCookie } from "@/lib/auth";
-import { generateOtp, hashOtp, OTP_TTL_SECONDS } from "@/lib/otp";
-import { sendEmail, otpEmail } from "@/lib/email";
+import { makeSendEmail } from "@/lib/authpkg";
+import { otpEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -38,17 +39,17 @@ export async function POST(req: NextRequest) {
   }
 
   if (user.email_verified !== 1) {
-    // Send a fresh OTP and tell the client to route to /verify.
-    const code = generateOtp();
-    const codeHash = await hashOtp(code, env.TOKEN_SECRET);
-    const expiresAt = Math.floor(Date.now() / 1000) + OTP_TTL_SECONDS;
-    await upsertOtp(env.DB, email, codeHash, expiresAt);
-    const tpl = otpEmail({ code, ttlMinutes: Math.floor(OTP_TTL_SECONDS / 60) });
-    if (env.RESEND_API_KEY && env.RESEND_FROM) {
-      await sendEmail(
-        { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
-        { to: email, ...tpl },
-      );
+    // Correct password but unverified: send a fresh OTP and route to /verify.
+    const sendEmailFn = makeSendEmail(env);
+    if (sendEmailFn) {
+      // cooldownSeconds:0 — a deliberate login attempt should always (re)send.
+      await resendOtp(env.DB, {
+        email,
+        secret: env.TOKEN_SECRET,
+        sendEmail: sendEmailFn,
+        cooldownSeconds: 0,
+        renderOtp: ({ code, ttlMinutes }) => otpEmail({ code, ttlMinutes }),
+      }).catch(() => {});
     }
     return NextResponse.json({ requiresVerification: true, email }, { status: 403 });
   }

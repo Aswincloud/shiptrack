@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import type { D1Database } from "@cloudflare/workers-types";
-import { signToken, verifyToken } from "./tokens";
+import { signToken, verifyToken } from "@aswincloud/auth";
 import { getUserById } from "./db";
 
 export const SESSION_COOKIE_NAME = "shiptrack_session";

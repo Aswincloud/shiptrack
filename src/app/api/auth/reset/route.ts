@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { updateUserPasswordHash } from "@/lib/db";
-import { verifyToken } from "@/lib/tokens";
-import { hashPassword } from "@/lib/passwords";
+import { resetPassword } from "@aswincloud/auth/d1";
 
 export const dynamic = "force-dynamic";
 
@@ -24,11 +22,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
 
-  const userId = await verifyToken(env.TOKEN_SECRET, parsed.data.token, "password_reset");
-  if (!userId) return NextResponse.json({ error: "invalid_token" }, { status: 400 });
-
-  const passwordHash = await hashPassword(parsed.data.password);
-  await updateUserPasswordHash(env.DB, userId, passwordHash);
-
+  const r = await resetPassword(env.DB, {
+    token: parsed.data.token,
+    newPassword: parsed.data.password,
+    secret: env.TOKEN_SECRET,
+  });
+  if (!r.ok) {
+    // invalid_token | weak_password (zod already guards length, so token is the usual case)
+    return NextResponse.json({ error: r.error === "weak_password" ? "invalid_input" : "invalid_token" }, { status: 400 });
+  }
   return NextResponse.json({ status: "ok" });
 }

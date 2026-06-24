@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { createUser, getUserByEmail, upsertOtp, listAdminEmails } from "@/lib/db";
-import { hashPassword } from "@/lib/passwords";
-import { generateOtp, hashOtp, OTP_TTL_SECONDS } from "@/lib/otp";
+import { getUserByEmail, listAdminEmails } from "@/lib/db";
+import { signup } from "@aswincloud/auth/d1";
+import { makeSendEmail } from "@/lib/authpkg";
 import { sendEmail, otpEmail, newSignupAdminEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
@@ -25,38 +25,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
   const email = parsed.data.email.toLowerCase();
-  const password = parsed.data.password;
 
+  // Anti-enumeration: a verified account already exists → generic pending, no
+  // password reset / email. (The flow would re-send a code to a verified user.)
   const existing = await getUserByEmail(env.DB, email);
   if (existing && existing.email_verified === 1) {
-    // Don't reveal that a verified account exists.
     return NextResponse.json({ status: "pending_verification" }, { status: 202 });
   }
 
-  if (!existing) {
-    const id = crypto.randomUUID();
-    const passwordHash = await hashPassword(password);
-    await createUser(env.DB, { id, email, passwordHash });
-  } else {
-    // Existing unverified account: refresh its password so the user can complete signup
-    // from a different device without remembering their first attempt.
-    const passwordHash = await hashPassword(password);
-    await env.DB.prepare(`UPDATE users SET password_hash = ? WHERE id = ?`).bind(passwordHash, existing.id).run();
+  const sendEmailFn = makeSendEmail(env)!; // RESEND_* checked above
+  const r = await signup(env.DB, {
+    email,
+    password: parsed.data.password,
+    secret: env.TOKEN_SECRET,
+    sendEmail: sendEmailFn,
+    newUserId: () => crypto.randomUUID(),
+    renderOtp: ({ code, ttlMinutes }) => otpEmail({ code, ttlMinutes }), // ShipTrack-branded
+  });
+  if (!r.ok) {
+    const status = r.error === "send_failed" ? 502 : 400;
+    const error = r.error === "send_failed" ? "send_failed" : "invalid_input";
+    return NextResponse.json({ error }, { status });
   }
 
-  const code = generateOtp();
-  const codeHash = await hashOtp(code, env.TOKEN_SECRET);
-  const expiresAt = Math.floor(Date.now() / 1000) + OTP_TTL_SECONDS;
-  await upsertOtp(env.DB, email, codeHash, expiresAt);
-
-  const tpl = otpEmail({ code, ttlMinutes: Math.floor(OTP_TTL_SECONDS / 60) });
-  await sendEmail(
-    { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
-    { to: email, ...tpl },
-  );
-
-  // Best-effort admin notification (only for genuinely new accounts, not
-  // re-attempts on an existing unverified row).
+  // Best-effort admin notification, only for genuinely new accounts (not a
+  // re-attempt on an existing unverified row).
   if (!existing) {
     try {
       const admins = await listAdminEmails(env.DB);

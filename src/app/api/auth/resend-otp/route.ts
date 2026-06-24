@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { getUserByEmail, getOtp, upsertOtp } from "@/lib/db";
-import { generateOtp, hashOtp, OTP_TTL_SECONDS, OTP_RESEND_COOLDOWN_SECONDS } from "@/lib/otp";
-import { sendEmail, otpEmail } from "@/lib/email";
+import { getUserByEmail } from "@/lib/db";
+import { resendOtp } from "@aswincloud/auth/d1";
+import { makeSendEmail } from "@/lib/authpkg";
+import { otpEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -22,27 +23,23 @@ export async function POST(req: NextRequest) {
   }
   const email = parsed.data.email.toLowerCase();
 
+  // Only resend for unverified accounts. Generic 200 otherwise (anti-enumeration).
   const user = await getUserByEmail(env.DB, email);
-  // Only resend for unverified accounts. Generic 200 otherwise to prevent enumeration.
   if (!user || user.email_verified === 1) {
     return NextResponse.json({ status: "ok" }, { status: 200 });
   }
 
-  const existing = await getOtp(env.DB, email);
-  const now = Math.floor(Date.now() / 1000);
-  if (existing && existing.created_at + OTP_RESEND_COOLDOWN_SECONDS > now) {
-    return NextResponse.json({ error: "cooldown" }, { status: 429 });
+  const r = await resendOtp(env.DB, {
+    email,
+    secret: env.TOKEN_SECRET,
+    sendEmail: makeSendEmail(env)!,
+    renderOtp: ({ code, ttlMinutes }) => otpEmail({ code, ttlMinutes }),
+  });
+  if (!r.ok) {
+    if (r.error === "cooldown") return NextResponse.json({ error: "cooldown" }, { status: 429 });
+    if (r.error === "send_failed") return NextResponse.json({ error: "send_failed" }, { status: 502 });
+    // no_account — racey delete between the check and here; stay generic.
+    return NextResponse.json({ status: "ok" }, { status: 200 });
   }
-
-  const code = generateOtp();
-  const codeHash = await hashOtp(code, env.TOKEN_SECRET);
-  await upsertOtp(env.DB, email, codeHash, now + OTP_TTL_SECONDS);
-
-  const tpl = otpEmail({ code, ttlMinutes: Math.floor(OTP_TTL_SECONDS / 60) });
-  await sendEmail(
-    { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
-    { to: email, ...tpl },
-  );
-
   return NextResponse.json({ status: "ok" }, { status: 200 });
 }

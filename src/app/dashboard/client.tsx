@@ -34,28 +34,16 @@ interface AdminUser {
   watch_count: number;
 }
 
-export interface PendingEmailChangeRequest {
-  id: string;
-  userId: string;
-  userEmail: string;
-  userName: string | null;
-  currentEmail: string;
-  requestedEmail: string;
-  createdAt: number;
-}
-
 export function DashboardClient({
   email,
   initialWatches,
   isAdmin,
   adminUsers,
-  pendingEmailChangeRequests,
 }: {
   email: string;
   initialWatches: ClientWatch[];
   isAdmin: boolean;
   adminUsers: AdminUser[] | null;
-  pendingEmailChangeRequests: PendingEmailChangeRequest[] | null;
 }) {
   const router = useRouter();
   const [watches, setWatches] = useState<ClientWatch[]>(initialWatches);
@@ -191,12 +179,6 @@ export function DashboardClient({
               />
             </div>
           )}
-        </section>
-      )}
-
-      {isAdmin && pendingEmailChangeRequests && pendingEmailChangeRequests.length > 0 && (
-        <section style={{ marginTop: 32 }}>
-          <EmailChangeRequestsSection initial={pendingEmailChangeRequests} />
         </section>
       )}
 
@@ -932,121 +914,3 @@ const td: React.CSSProperties = {
   borderBottom: "1px solid var(--border)",
 };
 const trStyle: React.CSSProperties = {};
-
-function EmailChangeRequestsSection({ initial }: { initial: PendingEmailChangeRequest[] }) {
-  const [requests, setRequests] = useState<PendingEmailChangeRequest[]>(initial);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
-
-  async function decide(req: PendingEmailChangeRequest, action: "approve" | "reject") {
-    let reason: string | null = null;
-    if (action === "reject") {
-      reason = prompt(`Reject ${req.userEmail}'s request to change to ${req.requestedEmail}?\n\nOptional reason (shown to the user):`);
-      if (reason === null) return; // cancelled
-    } else if (!confirm(`Approve changing ${req.userEmail} → ${req.requestedEmail}?`)) {
-      return;
-    }
-    setBusyId(req.id);
-    setFeedback(null);
-    const res = await fetch(`/api/admin/email-change-requests/${encodeURIComponent(req.id)}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, reason: reason || undefined }),
-    });
-    setBusyId(null);
-    if (res.ok) {
-      setRequests((rs) => rs.filter((r) => r.id !== req.id));
-      setFeedback({ kind: "ok", text: action === "approve" ? "Approved and user notified." : "Rejected and user notified." });
-      return;
-    }
-    const j = await res.json().catch(() => ({}));
-    setFeedback({
-      kind: "err",
-      text:
-        j.error === "email_taken"
-          ? "Can't approve — that email is now in use by another account."
-          : `Couldn't ${action} request.`,
-    });
-  }
-
-  if (requests.length === 0) return null;
-
-  return (
-    <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-      <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
-          Pending email change requests ({requests.length})
-        </h2>
-        {feedback && (
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 13,
-              color: feedback.kind === "ok" ? "var(--success)" : "var(--danger)",
-            }}
-          >
-            {feedback.text}
-          </div>
-        )}
-      </div>
-      <div style={{ overflowX: "auto" }}>
-        <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-          <thead>
-            <tr style={{ background: "var(--neutral-bg, #f8fafc)", textAlign: "left" }}>
-              <th style={th}>User</th>
-              <th style={th}>Current → Requested</th>
-              <th style={th}>Submitted</th>
-              <th style={{ ...th, textAlign: "right" }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {requests.map((r) => (
-              <tr key={r.id} style={trStyle}>
-                <td style={td} data-label="User">
-                  <div>{r.userName || r.userEmail}</div>
-                  {r.userName && (
-                    <div style={{ fontSize: 12, color: "var(--muted)" }}>{r.userEmail}</div>
-                  )}
-                </td>
-                <td style={td} data-label="Change">
-                  <span style={{ color: "var(--muted)" }}>{r.currentEmail}</span>
-                  <span style={{ margin: "0 6px", color: "var(--muted)" }}>→</span>
-                  <strong>{r.requestedEmail}</strong>
-                </td>
-                <td style={td} data-label="Submitted">
-                  {new Date(r.createdAt * 1000).toLocaleDateString()}
-                </td>
-                <td style={{ ...td, textAlign: "right" }} data-label="Action">
-                  <div style={{ display: "inline-flex", gap: 6 }}>
-                    <button
-                      type="button"
-                      disabled={busyId === r.id}
-                      onClick={() => decide(r, "approve")}
-                      style={{ ...buttonStyle, padding: "6px 12px", fontSize: 12 }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyId === r.id}
-                      onClick={() => decide(r, "reject")}
-                      style={{
-                        ...buttonGhostStyle,
-                        padding: "6px 12px",
-                        fontSize: 12,
-                        color: "var(--danger)",
-                        borderColor: "var(--danger-border)",
-                      }}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
