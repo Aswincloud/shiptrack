@@ -6,8 +6,17 @@
 // emails keep going out through the same transport (and stay ShipTrack-branded
 // via the render* overrides the routes pass in).
 
-import type { OAuthConfig } from "@aswincloud/auth";
-import { emailAllowed, parseAccessMode } from "@aswincloud/auth";
+import type { OAuthConfig, ProviderId, RelayClaims } from "@aswincloud/auth";
+import {
+  emailAllowed,
+  parseAccessMode,
+  signToken,
+  verifyToken,
+  verifyRelay,
+  serializeCookie,
+  readCookie,
+  randomSecret,
+} from "@aswincloud/auth";
 import type { EmailSender } from "@aswincloud/auth/d1";
 import type { AppEnv } from "./env";
 import { sendEmail } from "./email";
@@ -73,4 +82,70 @@ export function makeSendEmail(env: AppEnv): EmailSender | null {
   if (!env.RESEND_API_KEY || !env.RESEND_FROM) return null;
   const mail = { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL };
   return (args) => sendEmail(mail, args);
+}
+
+// ---- central OAuth broker (auth.aswincloud.com) ----
+//
+// When AUTH_BROKER_URL + RELAY_SECRET are set, OAuth sign-in is relayed through
+// the broker (one OAuth client per provider, shared across sites) instead of
+// shiptrack's own per-provider clients. The broker authenticates the user and
+// relays {email, provider, providerUserId, nonce} signed with our RELAY_SECRET;
+// we verify it, match the nonce we issued, and run the SAME account-linking flow
+// as before (on the provider's stable user id).
+
+export const SITE_ID = "shiptrack"; // how this site is registered with the broker
+const NONCE_COOKIE = "shiptrack_oauth_nonce";
+const NONCE_PURPOSE = "broker_nonce";
+const NONCE_TTL_SECONDS = 10 * 60;
+
+/** True when sign-in should go through the broker (vs shiptrack's own clients). */
+export function brokerConfigured(env: AppEnv): boolean {
+  return !!(env.AUTH_BROKER_URL && env.RELAY_SECRET && env.TOKEN_SECRET);
+}
+
+/**
+ * Build the broker `/start` redirect for a provider, plus a signed, short-lived
+ * nonce cookie binding this login attempt to the relay we'll get back. Returns
+ * the absolute start URL and the Set-Cookie header value.
+ */
+export async function brokerStart(
+  env: AppEnv,
+  provider: ProviderId,
+): Promise<{ location: string; setCookie: string }> {
+  const nonce = randomSecret(16);
+  const nonceTok = await signToken(env.TOKEN_SECRET, nonce, NONCE_PURPOSE, NONCE_TTL_SECONDS);
+  const appUrl = env.APP_URL.replace(/\/$/, "");
+  const base = env.AUTH_BROKER_URL!.replace(/\/$/, "");
+  const start = new URL(`${base}/api/oauth/${provider}/start`);
+  start.searchParams.set("site", SITE_ID);
+  start.searchParams.set("return", `${appUrl}/api/auth/oauth/${provider}/callback`);
+  start.searchParams.set("nonce", nonce);
+  return {
+    location: start.toString(),
+    setCookie: serializeCookie(NONCE_COOKIE, nonceTok, { maxAgeSeconds: NONCE_TTL_SECONDS }),
+  };
+}
+
+/** Clear the broker nonce cookie (used on callback completion/failure). */
+export function clearBrokerNonceCookie(): string {
+  return serializeCookie(NONCE_COOKIE, "", { maxAgeSeconds: 0 });
+}
+
+/**
+ * Verify a broker relay token from the callback: signature (our RELAY_SECRET),
+ * provider match, and that its nonce matches the one we issued (replay defense).
+ * Returns the verified claims or null.
+ */
+export async function verifyBrokerRelay(
+  env: AppEnv,
+  req: Request,
+  provider: ProviderId,
+  relayToken: string,
+): Promise<RelayClaims | null> {
+  const claims = await verifyRelay(env.RELAY_SECRET ?? "", relayToken);
+  if (!claims || claims.provider !== provider) return null;
+  const nonceTok = readCookie(req, NONCE_COOKIE);
+  const expected = nonceTok ? await verifyToken(env.TOKEN_SECRET, nonceTok, NONCE_PURPOSE) : null;
+  if (!expected || expected !== claims.nonce) return null;
+  return claims;
 }

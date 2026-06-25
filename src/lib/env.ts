@@ -13,6 +13,11 @@ export interface AppEnv {
   ACCESS_MODE?: string; // "public" | "domain" | "owners"
   ACCESS_DOMAINS?: string; // comma-separated, used when ACCESS_MODE=domain
   OWNER_EMAILS?: string; // comma-separated allowlist, used when ACCESS_MODE=owners
+  // Central OAuth broker (auth.aswincloud.com). When set, OAuth sign-in is
+  // relayed through the broker instead of shiptrack's own provider clients.
+  AUTH_BROKER_URL?: string; // e.g. https://auth.aswincloud.com
+  RELAY_SECRET?: string; // per-site shared secret; verifies the broker's relay token
+  // Per-provider clients (legacy / fallback when the broker isn't configured):
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GITHUB_CLIENT_ID?: string;
