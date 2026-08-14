@@ -59,6 +59,11 @@ export const DEFAULT_POLL_INTERVAL_SECONDS = 840;
 export const MIN_POLL_INTERVAL_SECONDS = 15 * 60;
 export const MAX_POLL_INTERVAL_SECONDS = 12 * 60 * 60;
 
+// Ceiling on how many shipments one account can have in flight (pending +
+// active). Bounds the mail a single account can generate and keeps one user
+// from monopolising the poller, which handles 50 watches per 15-minute tick.
+export const MAX_OPEN_WATCHES_PER_USER = 50;
+
 export async function createWatch(db: D1Database, w: NewWatch): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const interval = w.pollIntervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS;
@@ -109,6 +114,35 @@ export async function cancelWatch(db: D1Database, id: string): Promise<boolean> 
   const res = await db
     .prepare(`UPDATE watches SET status='cancelled' WHERE id=? AND status != 'cancelled'`)
     .bind(id)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+// Count the watches an account has in flight. Pending rows count too: each one
+// has already sent a confirmation email, so they're part of what the cap bounds.
+export async function countOpenWatchesForUser(db: D1Database, userId: string): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM watches WHERE user_id = ? AND status IN ('pending','active')`)
+    .bind(userId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+// Send a watch back to 'pending' — used when its notify address is repointed at
+// someone else, so alerts stop until the new recipient confirms. Deliberately
+// scoped to in-flight rows: a completed or cancelled watch must not be revived
+// by an edit.
+export async function setWatchPendingForUser(
+  db: D1Database,
+  id: string,
+  userId: string,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE watches SET status='pending', confirmed_at=NULL
+       WHERE id=? AND user_id=? AND status IN ('pending','active')`,
+    )
+    .bind(id, userId)
     .run();
   return (res.meta?.changes ?? 0) > 0;
 }

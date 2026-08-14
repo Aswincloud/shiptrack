@@ -291,14 +291,15 @@ function AddWatchModal({
         return;
       }
       // POST returns {status, id} — build the row optimistically. It starts with
-      // no scan yet, so the dashboard shows "awaiting first scan".
+      // no scan yet, so the dashboard shows "awaiting first scan" (or "awaiting
+      // confirmation" when the notify address isn't the account's own).
       onAdded({
         id: body.id,
         email: email.trim(),
         carrier,
         trackingNumber: tr,
         label: label.trim() || null,
-        status: "active",
+        status: body.status === "pending_confirmation" ? "pending" : "active",
         lastKnownStatus: null,
         lastPolledAt: null,
         createdAt: Math.floor(Date.now() / 1000),
@@ -641,7 +642,16 @@ function WatchRow({
       body: JSON.stringify(body),
     });
     setSaving(false);
-    if (res.ok) onSave({ label: label || null, email, pollIntervalSeconds: interval });
+    if (!res.ok) return;
+    // Repointing the watch at someone else's address parks it until they
+    // confirm — reflect that instead of leaving the row looking active.
+    const body2 = (await res.json().catch(() => ({}))) as { pendingConfirmation?: boolean };
+    onSave({
+      label: label || null,
+      email,
+      pollIntervalSeconds: interval,
+      ...(body2.pendingConfirmation ? { status: "pending" } : {}),
+    });
   }
 
   // For both 'cancelled' (user) and 'completed' (poller saw delivered/returned)
@@ -651,11 +661,15 @@ function WatchRow({
   const statusText =
     w.status === "cancelled"
       ? "cancelled"
-      : w.lastKnownStatus
-        ? w.lastKnownStatus.replace(/_/g, " ")
-        : // Active watch with no scan yet — e.g. a pre-tracked AWB the carrier
-          // hasn't ingested. Make that explicit rather than showing "active".
-          "awaiting first scan";
+      : // Parked on a notify address that isn't the account's own: no alerts go
+        // out until the recipient clicks the confirmation link.
+        w.status === "pending"
+        ? "awaiting confirmation"
+        : w.lastKnownStatus
+          ? w.lastKnownStatus.replace(/_/g, " ")
+          : // Active watch with no scan yet — e.g. a pre-tracked AWB the carrier
+            // hasn't ingested. Make that explicit rather than showing "active".
+            "awaiting first scan";
   const polled = w.lastPolledAt ? new Date(w.lastPolledAt * 1000).toLocaleString() : "—";
 
   if (editing) {
