@@ -134,6 +134,22 @@ Local Workers preview (runs the actual worker bundle):
 npm run preview
 ```
 
+### CI deploys (Cloudflare Workers Builds)
+
+Both workers are also built by Cloudflare Workers Builds on every push. Each
+worker has two build configurations, and **the deploy is the trigger's job, not
+the build command's**:
+
+| branch | build command | deploy command |
+| --- | --- | --- |
+| `main` | `npm run deploy:web` | `npx wrangler deploy` |
+| any other | `npm run deploy:web` | `npx wrangler versions upload` (preview only) |
+
+`deploy:web` therefore only *builds* — despite the name, which is fixed by the
+existing trigger config. Do not make it deploy: it runs on every branch, so it
+would ship unreviewed branch code straight to production. `npm run deploy` is
+the manual full deploy (web + poller).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
