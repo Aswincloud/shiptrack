@@ -66,10 +66,13 @@ export async function verifyToken(
   if (parts.length !== 2) return null;
   const [body, sig] = parts;
   const expected = await hmac(secret, body);
-  const actual = b64urlDecode(sig);
-  if (!constantTimeEqual(expected, actual)) return null;
   let payload: Payload;
   try {
+    // Both decodes can throw on a malformed token (atob → DOMException) — e.g. a
+    // link a mail client wrapped or truncated. That's an *invalid* token, not a
+    // server error, so it has to be caught rather than escaping as a 500.
+    const actual = b64urlDecode(sig);
+    if (!constantTimeEqual(expected, actual)) return null;
     payload = JSON.parse(new TextDecoder().decode(b64urlDecode(body))) as Payload;
   } catch {
     return null;
