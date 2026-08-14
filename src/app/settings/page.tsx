@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
 import { readSessionFromCookies } from "@/lib/auth";
-import { getUserById, getPendingEmailChangeRequestForUser } from "@/lib/db";
+import { getUserById } from "@/lib/db";
+import { hasRealPassword } from "@aswincloud/auth/d1";
 import { SettingsClient } from "./client";
 
 export const dynamic = "force-dynamic";
-
-const OAUTH_ONLY_HASH = "pbkdf2$100000$oauth_only$oauth_only";
 
 export default async function SettingsPage() {
   const env = getEnv();
@@ -19,24 +18,13 @@ export default async function SettingsPage() {
   const user = await getUserById(env.DB, sess.userId);
   if (!user) redirect("/login");
 
-  const pendingEmailChange = await getPendingEmailChangeRequestForUser(env.DB, user.id);
-
   return (
     <SettingsClient
       email={user.email}
       name={user.name}
       isAdmin={user.is_admin === 1}
-      hasPassword={user.password_hash !== OAUTH_ONLY_HASH}
+      hasPassword={hasRealPassword(user)}
       createdAt={user.created_at}
-      initialPendingEmailChange={
-        pendingEmailChange
-          ? {
-              id: pendingEmailChange.id,
-              requestedEmail: pendingEmailChange.requested_email,
-              createdAt: pendingEmailChange.created_at,
-            }
-          : null
-      }
     />
   );
 }

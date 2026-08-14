@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getEnv } from "@/lib/env";
+import { getEnv, type AppEnv } from "@/lib/env";
+import { handleOAuthCallback, clearStateCookie, type ProviderId } from "@aswincloud/auth";
+import { OAUTH_ONLY_HASH } from "@aswincloud/auth/d1";
 import {
-  exchangeCode,
-  fetchOAuthUser,
-  isProviderConfigured,
-  verifyState,
-  clearStateCookie,
-  STATE_COOKIE,
-  type ProviderId,
-} from "@/lib/oauth";
+  oauthConfig,
+  emailAllowedForSite,
+  brokerConfigured,
+  verifyBrokerRelay,
+  clearBrokerNonceCookie,
+} from "@/lib/authpkg";
 import {
   createUser,
   getUserByEmail,
@@ -22,15 +22,74 @@ export const dynamic = "force-dynamic";
 
 const SUPPORTED: ProviderId[] = ["google", "github", "microsoft"];
 
-// Sentinel placed in password_hash for OAuth-only signups. It uses our normal
-// pbkdf2$<iter>$<salt>$<hash> shape so verifyPassword still returns false for
-// any input, while staying valid to anything that just reads the column.
-const OAUTH_ONLY_HASH = "pbkdf2$100000$oauth_only$oauth_only";
-
-function errorRedirect(env: { APP_URL: string }, code: string): NextResponse {
+// One redirect helper for both paths. `extraCookies` lets each path clear its own
+// transient cookie (the package state cookie, or the broker nonce cookie).
+function errorRedirect(env: { APP_URL: string }, code: string, extraCookies: string[]): NextResponse {
   const url = `${env.APP_URL.replace(/\/$/, "")}/login?oauth_error=${encodeURIComponent(code)}`;
   const res = NextResponse.redirect(url, { status: 303 });
-  res.headers.set("Set-Cookie", clearStateCookie());
+  for (const c of extraCookies) res.headers.append("Set-Cookie", c);
+  return res;
+}
+
+// The verified provider identity, however it was obtained (broker relay or local
+// OAuth). Account-linking below is identical for both.
+interface VerifiedIdentity {
+  provider: ProviderId;
+  providerUserId: string;
+  email: string;
+}
+
+// Steps 1–3: find or create the local user for a verified provider identity, then
+// set the session. Shared by the broker and legacy paths so linking semantics —
+// match on (provider, providerUserId), else by email, else create (access-gated)
+// — stay identical. `clearCookies` are appended to every response.
+async function loginWithIdentity(
+  env: AppEnv,
+  id: VerifiedIdentity,
+  clearCookies: string[],
+): Promise<NextResponse> {
+  const lowerEmail = id.email.toLowerCase();
+
+  // 1. Existing OAuth identity (returning user).
+  let user = await getUserByOAuthIdentity(env.DB, id.provider, id.providerUserId);
+
+  // 2. Otherwise auto-link by email (password account or another provider).
+  if (!user) {
+    user = await getUserByEmail(env.DB, lowerEmail);
+    if (user) {
+      await linkOAuthIdentity(env.DB, {
+        provider: id.provider,
+        providerUserId: id.providerUserId,
+        userId: user.id,
+        email: lowerEmail,
+      });
+      if (user.email_verified !== 1) await markEmailVerified(env.DB, user.id);
+    }
+  }
+
+  // 3. Brand-new user: create the row (OAuth-only sentinel hash) + link identity.
+  if (!user) {
+    // Access policy gates account *creation* only — returning users (steps 1-2)
+    // are never re-gated. Default mode is "public" (open) unless ACCESS_MODE set.
+    if (!emailAllowedForSite(env, lowerEmail)) return errorRedirect(env, "not_allowed", clearCookies);
+    const newId = crypto.randomUUID();
+    await createUser(env.DB, { id: newId, email: lowerEmail, passwordHash: OAUTH_ONLY_HASH });
+    await markEmailVerified(env.DB, newId);
+    await linkOAuthIdentity(env.DB, {
+      provider: id.provider,
+      providerUserId: id.providerUserId,
+      userId: newId,
+      email: lowerEmail,
+    });
+    user = await getUserByEmail(env.DB, lowerEmail);
+    if (!user) return errorRedirect(env, "create_failed", clearCookies);
+  }
+
+  const sessionCookie = await createSessionCookie(env.TOKEN_SECRET, user.id);
+  const redirect = `${env.APP_URL.replace(/\/$/, "")}/dashboard`;
+  const res = NextResponse.redirect(redirect, { status: 303 });
+  for (const c of clearCookies) res.headers.append("Set-Cookie", c);
+  res.headers.append("Set-Cookie", sessionCookie);
   return res;
 }
 
@@ -39,97 +98,38 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ provider: s
   const { provider: rawProvider } = await ctx.params;
   const provider = rawProvider as ProviderId;
 
-  if (!env.DB || !env.TOKEN_SECRET) {
-    return errorRedirect(env, "not_configured");
-  }
-  if (!SUPPORTED.includes(provider) || !isProviderConfigured(provider, env)) {
-    return errorRedirect(env, "unknown_provider");
-  }
+  if (!env.DB || !env.TOKEN_SECRET) return errorRedirect(env, "not_configured", []);
+  if (!SUPPORTED.includes(provider)) return errorRedirect(env, "unknown_provider", []);
 
-  const url = new URL(req.url);
-  const code = url.searchParams.get("code");
-  const stateParam = url.searchParams.get("state");
-  const oauthError = url.searchParams.get("error");
-  if (oauthError) return errorRedirect(env, oauthError);
-  if (!code || !stateParam) return errorRedirect(env, "missing_code");
+  // --- Broker path: the central broker relayed a verified identity to us. ---
+  if (brokerConfigured(env)) {
+    const clear = [clearBrokerNonceCookie()];
+    const url = new URL(req.url);
+    const relayError = url.searchParams.get("relay_error");
+    if (relayError) return errorRedirect(env, relayError, clear);
+    const relay = url.searchParams.get("relay");
+    if (!relay) return errorRedirect(env, "bad_state", clear);
 
-  // Verify state matches the cookie we set, and the cookie is a valid signed
-  // nonce. Both checks together protect against CSRF.
-  const stateCookieValue = req.cookies.get(STATE_COOKIE)?.value;
-  if (!stateCookieValue || stateCookieValue !== stateParam) {
-    return errorRedirect(env, "bad_state");
-  }
-  const stateOk = await verifyState(env.TOKEN_SECRET, stateParam);
-  if (!stateOk) return errorRedirect(env, "bad_state");
-
-  let accessToken: string;
-  try {
-    accessToken = await exchangeCode(provider, env, code);
-  } catch (err) {
-    console.warn(`oauth token exchange failed for ${provider}:`, err instanceof Error ? err.message : err);
-    return errorRedirect(env, "token_exchange_failed");
+    const claims = await verifyBrokerRelay(env, req, provider, relay);
+    if (!claims) return errorRedirect(env, "bad_state", clear);
+    if (!claims.providerUserId) return errorRedirect(env, "no_provider_id", clear);
+    // The broker only relays verified emails, so emailVerified is implicit here.
+    return loginWithIdentity(
+      env,
+      { provider, providerUserId: claims.providerUserId, email: claims.email },
+      clear,
+    );
   }
 
-  let oauthUser;
-  try {
-    oauthUser = await fetchOAuthUser(provider, accessToken);
-  } catch (err) {
-    console.warn(`oauth userinfo failed for ${provider}:`, err instanceof Error ? err.message : err);
-    return errorRedirect(env, "userinfo_failed");
-  }
-
-  if (!oauthUser.emailVerified) {
-    return errorRedirect(env, "email_not_verified");
-  }
-
-  const lowerEmail = oauthUser.email.toLowerCase();
-
-  // 1. Try to find an existing OAuth identity (returning user).
-  let user = await getUserByOAuthIdentity(env.DB, provider, oauthUser.providerUserId);
-
-  // 2. Otherwise, auto-link by email (existing password account or other OAuth
-  //    provider with the same address).
-  if (!user) {
-    user = await getUserByEmail(env.DB, lowerEmail);
-    if (user) {
-      await linkOAuthIdentity(env.DB, {
-        provider,
-        providerUserId: oauthUser.providerUserId,
-        userId: user.id,
-        email: lowerEmail,
-      });
-      if (user.email_verified !== 1) await markEmailVerified(env.DB, user.id);
-    }
-  }
-
-  // 3. Brand-new user: create the row and link the identity.
-  if (!user) {
-    const id = crypto.randomUUID();
-    await createUser(env.DB, {
-      id,
-      email: lowerEmail,
-      passwordHash: OAUTH_ONLY_HASH,
-    });
-    await markEmailVerified(env.DB, id);
-    await linkOAuthIdentity(env.DB, {
-      provider,
-      providerUserId: oauthUser.providerUserId,
-      userId: id,
-      email: lowerEmail,
-    });
-    user = await getUserByEmail(env.DB, lowerEmail);
-    if (!user) {
-      // Should never happen, but bail loudly if it does.
-      return errorRedirect(env, "create_failed");
-    }
-  }
-
-  const sessionCookie = await createSessionCookie(env.TOKEN_SECRET, user.id);
-  const redirect = `${env.APP_URL.replace(/\/$/, "")}/dashboard`;
-  const res = NextResponse.redirect(redirect, { status: 303 });
-  // Two Set-Cookie headers: clear state cookie + set session cookie.
-  res.headers.append("Set-Cookie", clearStateCookie());
-  res.headers.append("Set-Cookie", sessionCookie);
-  return res;
+  // --- Legacy path: shiptrack's own OAuth client did the exchange. ---
+  const cfg = oauthConfig(env);
+  const clear = [clearStateCookie(cfg)];
+  const result = await handleOAuthCallback(cfg, provider, req);
+  if (!result.ok) return errorRedirect(env, result.error, clear);
+  if (!result.user.emailVerified) return errorRedirect(env, "email_not_verified", clear);
+  return loginWithIdentity(
+    env,
+    { provider, providerUserId: result.user.providerUserId, email: result.user.email },
+    clear,
+  );
 }
-

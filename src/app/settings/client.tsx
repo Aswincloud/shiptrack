@@ -6,19 +6,12 @@ import { useRouter } from "next/navigation";
 import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, pageWrapStyle } from "../styles";
 import { PasswordStrength } from "../components/PasswordStrength";
 
-interface PendingEmailChange {
-  id: string;
-  requestedEmail: string;
-  createdAt: number;
-}
-
 interface Props {
   email: string;
   name: string | null;
   isAdmin: boolean;
   hasPassword: boolean;
   createdAt: number;
-  initialPendingEmailChange: PendingEmailChange | null;
 }
 
 export function SettingsClient(props: Props) {
@@ -36,7 +29,6 @@ export function SettingsClient(props: Props) {
         initialName={props.name}
         createdAt={props.createdAt}
         isAdmin={props.isAdmin}
-        initialPendingEmailChange={props.initialPendingEmailChange}
       />
       <PasswordSection hasPassword={props.hasPassword} />
       <DangerSection hasPassword={props.hasPassword} />
@@ -53,20 +45,17 @@ function ProfileSection({
   initialName,
   createdAt,
   isAdmin,
-  initialPendingEmailChange,
 }: {
   email: string;
   initialName: string | null;
   createdAt: number;
   isAdmin: boolean;
-  initialPendingEmailChange: PendingEmailChange | null;
 }) {
   const [name, setName] = useState(initialName ?? "");
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  // Email-change request state, hydrated from the server snapshot.
-  const [pending, setPending] = useState<PendingEmailChange | null>(initialPendingEmailChange);
+  // Self-service email change: submit a new address, we email it a confirm link.
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [requestedEmail, setRequestedEmail] = useState("");
   const [emailSubmitting, setEmailSubmitting] = useState(false);
@@ -96,22 +85,16 @@ function ProfileSection({
     const res = await fetch("/api/auth/email-change-requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestedEmail: target }),
+      body: JSON.stringify({ newEmail: target }),
     });
     setEmailSubmitting(false);
     if (res.ok) {
-      // Re-fetch our snapshot so we show the new pending state.
-      const me = await fetch("/api/auth/email-change-requests").then((r) => r.json()).catch(() => null);
-      if (me?.pending) {
-        setPending({
-          id: me.pending.id,
-          requestedEmail: me.pending.requested_email,
-          createdAt: me.pending.created_at,
-        });
-      }
       setShowEmailForm(false);
+      setEmailFeedback({
+        kind: "ok",
+        text: `Check ${target} for a confirmation link to finish the change.`,
+      });
       setRequestedEmail("");
-      setEmailFeedback({ kind: "ok", text: "Request sent. An admin will review it." });
       return;
     }
     const j = await res.json().catch(() => ({}));
@@ -120,22 +103,10 @@ function ProfileSection({
         ? "That's already your current email."
         : j.error === "email_taken"
           ? "That email is already in use by another account."
-          : j.error === "already_pending"
-            ? "You already have a pending request."
-            : "Couldn't submit request.";
+          : j.error === "invalid_email"
+            ? "That doesn't look like a valid email."
+            : "Couldn't send the confirmation. Try again.";
     setEmailFeedback({ kind: "err", text: msg });
-  }
-
-  async function cancelEmailRequest() {
-    if (!pending) return;
-    if (!confirm("Cancel your pending email change request?")) return;
-    const res = await fetch(`/api/auth/email-change-requests/${encodeURIComponent(pending.id)}`, { method: "DELETE" });
-    if (res.ok) {
-      setPending(null);
-      setEmailFeedback({ kind: "ok", text: "Request cancelled." });
-    } else {
-      setEmailFeedback({ kind: "err", text: "Couldn't cancel — refresh and try again." });
-    }
   }
 
   return (
@@ -149,41 +120,16 @@ function ProfileSection({
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
         <label style={labelStyle}>Email</label>
         <input value={email} disabled style={{ ...inputStyle, opacity: 0.7 }} />
-        {pending ? (
-          <div
-            style={{
-              marginTop: 8,
-              padding: "10px 12px",
-              background: "var(--warning-bg, #fffbeb)",
-              border: "1px solid var(--warning-border, #fde68a)",
-              borderRadius: 8,
-              fontSize: 13,
-              color: "var(--fg-soft)",
-              display: "flex",
-              gap: 10,
-              alignItems: "flex-start",
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <strong>Pending email change.</strong> An admin will review your request to switch to{" "}
-              <strong>{pending.requestedEmail}</strong> (submitted {new Date(pending.createdAt * 1000).toLocaleDateString()}).
-            </div>
-            <button
-              type="button"
-              onClick={cancelEmailRequest}
-              style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 12, color: "var(--danger)", borderColor: "var(--danger-border)" }}
-            >
-              Cancel request
-            </button>
-          </div>
-        ) : !showEmailForm ? (
+        {!showEmailForm ? (
           <button
             type="button"
-            onClick={() => setShowEmailForm(true)}
+            onClick={() => {
+              setShowEmailForm(true);
+              setEmailFeedback(null);
+            }}
             style={{ ...buttonGhostStyle, padding: "6px 12px", fontSize: 12, marginTop: 6, alignSelf: "flex-start" }}
           >
-            Request email change
+            Change email
           </button>
         ) : (
           <div
@@ -209,7 +155,8 @@ function ProfileSection({
                 />
               </label>
               <div style={{ fontSize: 12, color: "var(--muted)" }}>
-                An admin will review your request and you&apos;ll receive an email with the decision.
+                We&apos;ll email a confirmation link to the new address. The change
+                applies once you click it.
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button
@@ -217,7 +164,7 @@ function ProfileSection({
                   disabled={emailSubmitting || !requestedEmail.trim()}
                   style={{ ...buttonStyle, padding: "8px 14px", fontSize: 13 }}
                 >
-                  {emailSubmitting ? "Sending…" : "Submit request"}
+                  {emailSubmitting ? "Sending…" : "Send confirmation"}
                 </button>
                 <button
                   type="button"

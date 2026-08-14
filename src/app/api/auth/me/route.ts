@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
-import { getUserById, updateUserName, deleteUser, countAdmins } from "@/lib/db";
+import { getUserById } from "@/lib/db";
 import { readSession, clearSessionCookie } from "@/lib/auth";
-import { verifyPassword } from "@/lib/passwords";
+import { changeUsername, removeUser, hasRealPassword } from "@aswincloud/auth/d1";
 
 export const dynamic = "force-dynamic";
-
-// OAuth-only accounts get this exact placeholder hash on creation (see
-// /api/auth/oauth/[provider]/callback). It can't match any input.
-const OAUTH_ONLY_HASH = "pbkdf2$100000$oauth_only$oauth_only";
 
 export async function GET(req: NextRequest) {
   const env = getEnv();
@@ -26,7 +22,7 @@ export async function GET(req: NextRequest) {
     email: user.email,
     name: user.name,
     isAdmin: user.is_admin === 1,
-    hasPassword: user.password_hash !== OAUTH_ONLY_HASH,
+    hasPassword: hasRealPassword(user),
     createdAt: user.created_at,
   });
 }
@@ -45,14 +41,14 @@ export async function PATCH(req: NextRequest) {
   const parsed = PatchBody.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "invalid_input" }, { status: 400 });
 
-  await updateUserName(env.DB, sess.userId, parsed.data.name);
+  const r = await changeUsername(env.DB, { userId: sess.userId, name: parsed.data.name });
+  if (!r.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 }); // not_found
   return NextResponse.json({ status: "ok" });
 }
 
 const DeleteBody = z.object({
   // Password is required for accounts with a real password. OAuth-only accounts
-  // must type the literal string "delete my account" (case-insensitive trim) as
-  // a deliberate-action gate.
+  // must type the literal "delete my account" as a deliberate-action gate.
   password: z.string().optional(),
   confirm: z.string().optional(),
 });
@@ -63,39 +59,31 @@ export async function DELETE(req: NextRequest) {
   const sess = await readSession(env.TOKEN_SECRET, req);
   if (!sess) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const user = await getUserById(env.DB, sess.userId);
-  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-
-  // Block deleting the last admin so we can never lock ourselves out.
-  if (user.is_admin === 1) {
-    const admins = await countAdmins(env.DB);
-    if (admins <= 1) {
-      return NextResponse.json(
-        { error: "last_admin", message: "You're the only admin. Promote another user first." },
-        { status: 409 },
-      );
-    }
-  }
-
   const json = await req.json().catch(() => ({}));
   const parsed = DeleteBody.safeParse(json);
   if (!parsed.success) return NextResponse.json({ error: "invalid_input" }, { status: 400 });
 
-  const hasRealPassword = user.password_hash !== OAUTH_ONLY_HASH;
-  if (hasRealPassword) {
-    if (!parsed.data.password) {
-      return NextResponse.json({ error: "password_required" }, { status: 400 });
-    }
-    const ok = await verifyPassword(parsed.data.password, user.password_hash);
-    if (!ok) return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
-  } else {
-    // OAuth-only — require the confirm phrase.
-    if ((parsed.data.confirm ?? "").trim().toLowerCase() !== "delete my account") {
-      return NextResponse.json({ error: "confirm_required" }, { status: 400 });
+  // The flow enforces: last-admin guard, password for real-pw accounts, and the
+  // "delete my account" confirm phrase for OAuth-only accounts.
+  const r = await removeUser(env.DB, {
+    userId: sess.userId,
+    currentPassword: parsed.data.password,
+    confirmPhrase: parsed.data.confirm,
+    protectLastAdmin: true,
+  });
+  if (!r.ok) {
+    switch (r.error) {
+      case "not_found": return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      case "last_admin":
+        return NextResponse.json(
+          { error: "last_admin", message: "You're the only admin. Promote another user first." },
+          { status: 409 },
+        );
+      case "password_required": return NextResponse.json({ error: "password_required" }, { status: 400 });
+      case "invalid_credentials": return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
+      case "confirm_required": return NextResponse.json({ error: "confirm_required" }, { status: 400 });
     }
   }
-
-  await deleteUser(env.DB, user.id);
 
   // Drop the session cookie on the way out.
   const res = NextResponse.json({ status: "deleted" });
