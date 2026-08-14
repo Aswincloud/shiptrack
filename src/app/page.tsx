@@ -347,6 +347,14 @@ function NotifyForm({
       const body = await res.json();
       if (!res.ok) {
         setStatus({ kind: "err", msg: body.message ?? body.error ?? "Failed to register watch" });
+      } else if (body.status === "pending_confirmation") {
+        // Not your own account address — alerts don't start until whoever owns
+        // that inbox clicks the confirmation link.
+        setStatus({
+          kind: "ok",
+          msg: `Confirmation sent to ${email}. Alerts start once that link is clicked.`,
+        });
+        setLabel("");
       } else {
         setStatus({ kind: "ok", msg: `Watching. You'll get an email at ${email} on status changes.` });
         setLabel("");
