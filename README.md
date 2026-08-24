@@ -153,3 +153,5 @@ the manual full deploy (web + poller).
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+<!-- ruleset bypass-as-author test — delete with the PR -->
