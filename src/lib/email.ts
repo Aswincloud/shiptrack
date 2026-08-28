@@ -154,10 +154,20 @@ function button(href: string, label: string): string {
 }
 
 // A compact shipment "info card" used in alert + watch-created emails.
-function shipmentCard(args: { carrier: string; trackingNumber: string; label?: string | null }): string {
+function shipmentCard(args: {
+  carrier: string;
+  trackingNumber: string;
+  label?: string | null;
+  estimatedDelivery?: string | null;
+}): string {
   const labelRow = args.label
     ? `<tr><td style="padding:2px 0;color:#94a3b8;font-size:13px;">Label</td><td style="padding:2px 0;color:#0f172a;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(
         args.label,
+      )}</td></tr>`
+    : "";
+  const etaRow = args.estimatedDelivery
+    ? `<tr><td style="padding:2px 0;color:#94a3b8;font-size:13px;">Expected delivery</td><td style="padding:2px 0;color:#0f172a;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(
+        args.estimatedDelivery,
       )}</td></tr>`
     : "";
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin:4px 0 8px;">
@@ -170,6 +180,7 @@ function shipmentCard(args: { carrier: string; trackingNumber: string; label?: s
           args.trackingNumber,
         )}</td></tr>
         ${labelRow}
+        ${etaRow}
       </table>
     </td></tr>
   </table>`;
@@ -210,6 +221,7 @@ export function statusChangeEmail(args: {
   description: string;
   location?: string;
   timestamp?: string;
+  estimatedDelivery?: string | null;
   unsubscribeUrl: string;
 }): { subject: string; html: string; text: string } {
   const ref = args.label ?? args.trackingNumber;
@@ -240,7 +252,8 @@ export function statusChangeEmail(args: {
       </p>
     `,
   });
-  const text = `${humanStatus(args.newStatus)}: ${args.description}${meta ? ` (${meta})` : ""}\nUnsubscribe: ${args.unsubscribeUrl}`;
+  const eta = args.estimatedDelivery ? `\nExpected delivery: ${args.estimatedDelivery}` : "";
+  const text = `${humanStatus(args.newStatus)}: ${args.description}${meta ? ` (${meta})` : ""}${eta}\nUnsubscribe: ${args.unsubscribeUrl}`;
   return { subject, html, text };
 }
 

@@ -16,6 +16,7 @@ interface ClientWatch {
   label: string | null;
   status: string;
   lastKnownStatus: string | null;
+  estimatedDelivery: string | null;
   lastPolledAt: number | null;
   createdAt: number;
   completedAt: number | null;
@@ -301,6 +302,7 @@ function AddWatchModal({
         label: label.trim() || null,
         status: body.status === "pending_confirmation" ? "pending" : "active",
         lastKnownStatus: null,
+        estimatedDelivery: null,
         lastPolledAt: null,
         createdAt: Math.floor(Date.now() / 1000),
         completedAt: null,
@@ -727,6 +729,11 @@ function WatchRow({
       <td style={td} data-label="Email"><span style={{ color: "var(--muted)" }}>{w.email}</span></td>
       <td style={td} data-label="Status">
         <span style={statusPillStyle(pillStatus)}>{statusText}</span>
+        {!isFinished && w.estimatedDelivery && (
+          <div style={{ color: "var(--muted)", fontSize: 11, marginTop: 3 }}>
+            expected {w.estimatedDelivery}
+          </div>
+        )}
         {purgeDaysLeft !== null && (
           <div style={{ color: "var(--muted-soft)", fontSize: 11, marginTop: 3 }}>
             auto-removes in {purgeDaysLeft === 0 ? "<1 day" : `${purgeDaysLeft} day${purgeDaysLeft === 1 ? "" : "s"}`}
