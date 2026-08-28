@@ -7,6 +7,8 @@ export interface NotificationPayload {
   oldStatus: string | null;
   newStatus: string;
   event: TrackingEvent;
+  // Carrier's expected delivery date, when it publishes one.
+  estimatedDelivery?: string | null;
   unsubscribeUrl: string;
 }
 

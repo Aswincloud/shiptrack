@@ -46,6 +46,7 @@ function serializeWatch(w: WatchRow) {
     label: w.label,
     status: w.status,
     lastKnownStatus: w.last_known_status,
+    estimatedDelivery: w.estimated_delivery,
     lastPolledAt: w.last_polled_at,
     createdAt: w.created_at,
     completedAt: w.completed_at,

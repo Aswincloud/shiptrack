@@ -17,6 +17,7 @@ export const emailResend: Notifier = {
       description: payload.event.description,
       location: payload.event.location,
       timestamp: payload.event.timestamp,
+      estimatedDelivery: payload.estimatedDelivery,
       unsubscribeUrl: payload.unsubscribeUrl,
     });
     await sendEmail(

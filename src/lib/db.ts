@@ -11,6 +11,7 @@ export interface WatchRow {
   last_known_status: string | null;
   last_event_hash: string | null;
   last_polled_at: number | null;
+  estimated_delivery: string | null;
   created_at: number;
   confirmed_at: number | null;
   completed_at: number | null;
@@ -226,6 +227,10 @@ export async function markPolled(
   updates: {
     lastKnownStatus?: string;
     lastEventHash?: string;
+    // Carrier's expected delivery date, verbatim. Only pass it when the carrier
+    // actually returned one: omitting leaves the stored value alone, so a single
+    // flaky scrape can't wipe a date we already know.
+    estimatedDelivery?: string;
     // Shipment reached a terminal state (delivered/returned). Stops further
     // polling but is distinct from a user-initiated cancellation.
     complete?: boolean;
@@ -241,6 +246,10 @@ export async function markPolled(
   if (updates.lastEventHash !== undefined) {
     fields.push("last_event_hash = ?");
     values.push(updates.lastEventHash);
+  }
+  if (updates.estimatedDelivery !== undefined) {
+    fields.push("estimated_delivery = ?");
+    values.push(updates.estimatedDelivery);
   }
   if (updates.complete) {
     fields.push("status = 'completed'");

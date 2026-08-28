@@ -43,15 +43,19 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
     return;
   }
 
+  // The carrier can revise the expected delivery date without adding a scan, so
+  // refresh it on every successful poll rather than only on a status change.
+  const eta = result.estimatedDelivery;
+
   const latest = result.events[result.events.length - 1];
   if (!latest) {
-    await markPolled(env.DB, w.id, { lastKnownStatus: result.status });
+    await markPolled(env.DB, w.id, { lastKnownStatus: result.status, estimatedDelivery: eta });
     return;
   }
 
   const hash = await sha256Hex(`${latest.timestamp}|${latest.rawCode ?? ""}|${latest.description}`);
   if (hash === w.last_event_hash) {
-    await markPolled(env.DB, w.id);
+    await markPolled(env.DB, w.id, { estimatedDelivery: eta });
     return;
   }
 
@@ -74,6 +78,7 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
         oldStatus: w.last_known_status,
         newStatus: latest.status,
         event: latest,
+        estimatedDelivery: eta ?? w.estimated_delivery,
         unsubscribeUrl,
       },
     );
@@ -85,6 +90,7 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
   await markPolled(env.DB, w.id, {
     lastKnownStatus: latest.status,
     lastEventHash: hash,
+    estimatedDelivery: eta,
     complete,
   });
 }
