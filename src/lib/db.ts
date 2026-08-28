@@ -55,9 +55,18 @@ export interface NewWatch {
   pollIntervalSeconds?: number;
 }
 
-export const DEFAULT_POLL_INTERVAL_SECONDS = 840;
+export const DEFAULT_POLL_INTERVAL_SECONDS = 15 * 60;
 export const MIN_POLL_INTERVAL_SECONDS = 15 * 60;
 export const MAX_POLL_INTERVAL_SECONDS = 12 * 60 * 60;
+
+// Slack allowed when deciding whether a watch is due. The poller runs on a
+// fixed */15 cron, and `last_polled_at` is stamped when a poll *finishes* — a
+// few seconds into the tick. So the measured gap between two ticks is always a
+// little under 900s, and a watch whose interval is exactly 900 would miss every
+// other tick and run at 30 minutes instead of 15. Observed in production: ticks
+// 886-900s apart, polls completing 3-5s in. 60s absorbs both, and stays well
+// under one tick so nothing can be polled twice.
+export const POLL_TICK_GRACE_SECONDS = 60;
 
 // Ceiling on how many shipments one account can have in flight (pending +
 // active). Bounds the mail a single account can generate and keeps one user
@@ -194,16 +203,19 @@ export async function listDueWatches(
   batchSize: number,
 ): Promise<WatchRow[]> {
   // A watch is due when it's been longer than its own poll_interval_seconds
-  // since the last poll. Never-polled rows fire immediately.
+  // (less POLL_TICK_GRACE_SECONDS) since the last poll. Never-polled rows fire
+  // immediately. The grace exists because the cron period and the shortest
+  // allowed interval are both 15 minutes: without it, an interval of exactly
+  // 900s lands just short on every tick and halves the real polling rate.
   const res = await db
     .prepare(
       `SELECT * FROM watches
        WHERE status='active'
-         AND (last_polled_at IS NULL OR (? - last_polled_at) >= poll_interval_seconds)
+         AND (last_polled_at IS NULL OR (? - last_polled_at) >= poll_interval_seconds - ?)
        ORDER BY last_polled_at ASC NULLS FIRST
        LIMIT ?`,
     )
-    .bind(now, batchSize)
+    .bind(now, POLL_TICK_GRACE_SECONDS, batchSize)
     .all<WatchRow>();
   return res.results ?? [];
 }
