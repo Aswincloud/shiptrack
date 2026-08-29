@@ -7,7 +7,7 @@ import { readSessionFromCookies } from "@/lib/auth";
 import "./globals.css";
 
 const CHATWOOT_BASE_URL = "https://support.aswincloud.com";
-const CHATWOOT_WEBSITE_TOKEN = "A2f18JGY7uLahTifqxi74Ncd";
+const CHATWOOT_WEBSITE_TOKEN = "ZusuzaWiv6NVzZB6hHLa7WmF";
 
 export const dynamic = "force-dynamic";
 
