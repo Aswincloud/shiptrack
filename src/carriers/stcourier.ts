@@ -219,9 +219,11 @@ export const stcourier: Carrier = {
     return {
       carrier: "stcourier",
       trackingNumber: cleaned,
-      // Prefer the summary cell — it's ST Courier's own rollup — and fall back
-      // to the newest scan when the table is missing.
-      status: current ? mapStatus(current) : latest ? latest.status : "unknown",
+      // Prefer the newest scan. ST Courier's "Current Status" summary cell lags
+      // its own timeline — it still read "In Transit" while the latest scan was
+      // already "Out for Delivery" — so it's only a fallback when there are no
+      // scans to read.
+      status: latest ? latest.status : current ? mapStatus(current) : "unknown",
       origin,
       destination,
       events,

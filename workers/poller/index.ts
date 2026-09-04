@@ -29,6 +29,14 @@ async function sha256Hex(input: string): Promise<string> {
 async function processWatch(env: Env, w: WatchRow): Promise<void> {
   const carrier = getCarrier(w.carrier);
   if (!carrier) {
+    // The poller is deployed separately from the web app (`npm run
+    // deploy:poller`), so a carrier added to the registry is live on the site
+    // while this worker still has the old bundle. That combination silently
+    // stamps last_polled_at and leaves last_known_status null — the dashboard
+    // shows "awaiting first scan" forever and no alerts fire. Log it loudly.
+    console.warn(
+      `watch ${w.id} references unknown carrier "${w.carrier}" — this poller bundle predates it; redeploy the poller.`,
+    );
     await markPolled(env.DB, w.id);
     return;
   }
