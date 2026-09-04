@@ -14,6 +14,7 @@ const CARRIER_LABELS: Record<string, string> = {
   bluedart: "Blue Dart",
   shiprocket: "Shiprocket",
   delhivery: "Delhivery",
+  stcourier: "ST Courier",
 };
 function labelForCarrier(id: string): string {
   return CARRIER_LABELS[id] ?? id;
@@ -145,6 +146,7 @@ export default function Home() {
           <option value="bluedart">Blue Dart</option>
           <option value="shiprocket">Shiprocket (any courier)</option>
           <option value="delhivery">Delhivery</option>
+          <option value="stcourier">ST Courier</option>
         </select>
         <input
           value={tracking}

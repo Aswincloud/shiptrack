@@ -56,6 +56,24 @@ history shows the request shape.
 
 Polling every 15–30 minutes per shipment is plenty.
 
+### ST Courier
+
+No credentials required. ST Courier publishes no developer API, so the carrier
+replicates the two-step flow their own site uses:
+
+1. `POST https://stcourier.com/track/doCheck` with form field `awb_no`, which
+   stores the AWB against a new `ci_session` and returns only
+   `{"code":200,"msg":"Track Shipment"}`.
+2. `GET https://stcourier.com/track/shipment` carrying that cookie, which
+   renders the summary table and scan timeline server-side.
+
+The AWB lives in the session rather than the URL, so step 2 without the cookie
+from step 1 just returns the empty search form. Not-found is signalled by the
+absence of the "Status of AWB No." heading — the page still returns HTTP 200.
+
+AWBs are numeric and capped at 11 digits by their form. ST Courier exposes no
+expected-delivery date, so `estimatedDelivery` is always unset.
+
 ## Adding a carrier
 
 1. Create `src/carriers/<name>.ts` exporting a `Carrier` (see `types.ts`).
