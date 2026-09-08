@@ -198,6 +198,19 @@ Wrangler is a devDependency, and Cloudflare runs these commands with `/bin/sh`,
 which does not have `node_modules/.bin` on `PATH` — a bare `wrangler deploy`
 fails with `/bin/sh: 1: wrangler: not found`.
 
+**The poller's command must also keep `-c wrangler.poller.jsonc`**, which is why
+its row says `npm run deploy:poller` rather than the web worker's
+`npx wrangler deploy`. Without the flag wrangler falls back to the default
+`wrangler.jsonc`, whose `main` is the web app's `.open-next/worker.js`, and the
+poller build — whose build command is only `npm install` — never produces that
+bundle:
+
+```
+✘ [ERROR] The entry-point file at ".open-next/worker.js" was not found.
+```
+
+Copying the web row into the poller's config gets you exactly that error.
+
 That failure mode is quiet and expensive. The version command still succeeds, so
 versions keep accumulating in the dashboard while the *active* deployment stays
 frozen at whatever last promoted successfully. The poller ran a bundle that was
