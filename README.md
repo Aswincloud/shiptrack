@@ -74,6 +74,31 @@ absence of the "Status of AWB No." heading — the page still returns HTTP 200.
 AWBs are numeric and capped at 11 digits by their form. ST Courier exposes no
 expected-delivery date, so `estimatedDelivery` is always unset.
 
+### Delhivery
+
+No credentials required, but one is worth setting. Delhivery is tracked from two
+sources, best-first:
+
+1. **Account API** — used when `DELHIVERY_API_TOKEN` is set. Returns a full,
+   dated scan history, but only for shipments booked under that account.
+2. **Public feed** — used for everything else, including when no token is set.
+   This is the endpoint delhivery.com's own tracking page calls, and it needs no
+   credentials; the only gate is an `Origin: https://www.delhivery.com` header
+   (without it: `401 ERROR: Invalid Origin`).
+
+The public feed carries the current status and the expected delivery date, but
+its per-scan `scanDate` / `scanDateTime` fields come back empty — only top-level
+`status.statusDateTime` is reliably dated, so that always becomes the newest
+event. Undated scans are still surfaced for their location and remark.
+
+Setting the token therefore buys richer history for your own shipments; without
+it every AWB still resolves. A rejected or rate-limited token falls through to
+the public feed rather than failing the request.
+
+Waybills are numeric. The public feed accepts 11-14 digits and answers `400` to
+anything shorter or containing letters, which this carrier reports as
+`not_found`.
+
 ## Adding a carrier
 
 1. Create `src/carriers/<name>.ts` exporting a `Carrier` (see `types.ts`).
