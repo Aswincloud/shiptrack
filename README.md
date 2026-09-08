@@ -180,18 +180,38 @@ npm run preview
 ### CI deploys (Cloudflare Workers Builds)
 
 Both workers are also built by Cloudflare Workers Builds on every push. Each
-worker has two build configurations, and **the deploy is the trigger's job, not
-the build command's**:
+worker has its own build configuration, and **the deploy is the trigger's job,
+not the build command's**:
 
-| branch | build command | deploy command |
-| --- | --- | --- |
-| `main` | `npm run deploy:web` | `npx wrangler deploy` |
-| any other | `npm run deploy:web` | `npx wrangler versions upload` (preview only) |
+| worker | build command | deploy command (`main`) | version command (other branches) |
+| --- | --- | --- | --- |
+| `shiptrack` (web) | `npm run deploy:web` | `npx wrangler deploy` | `npx wrangler versions upload` |
+| `shiptrack-poller` | `npm install` | `npm run deploy:poller` | `npx wrangler versions upload` |
 
 `deploy:web` therefore only *builds* — despite the name, which is fixed by the
 existing trigger config. Do not make it deploy: it runs on every branch, so it
 would ship unreviewed branch code straight to production. `npm run deploy` is
 the manual full deploy (web + poller).
+
+**Every wrangler invocation in these fields must go through `npm` or `npx`.**
+Wrangler is a devDependency, and Cloudflare runs these commands with `/bin/sh`,
+which does not have `node_modules/.bin` on `PATH` — a bare `wrangler deploy`
+fails with `/bin/sh: 1: wrangler: not found`.
+
+That failure mode is quiet and expensive. The version command still succeeds, so
+versions keep accumulating in the dashboard while the *active* deployment stays
+frozen at whatever last promoted successfully. The poller ran a bundle that was
+a week stale this way: newly registered carriers were live on the site but
+unknown to the poller, which then silently stamped `last_polled_at` and left
+`last_known_status` null, so watches sat on "awaiting first scan" and never
+alerted. To check what is actually serving traffic, rather than merely uploaded:
+
+```bash
+npx wrangler deployments status -c wrangler.poller.jsonc
+```
+
+`Source: deployment` with a recent timestamp is a real deploy; `version_upload`
+next to a stale active version means the deploy step is failing.
 
 ## License
 
