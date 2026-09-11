@@ -3,12 +3,14 @@ import { bluedart } from "./bluedart";
 import { shiprocket } from "./shiprocket";
 import { delhivery } from "./delhivery";
 import { stcourier } from "./stcourier";
+import { tpc } from "./tpc";
 
 export const carriers: Record<string, Carrier> = {
   [bluedart.id]: bluedart,
   [shiprocket.id]: shiprocket,
   [delhivery.id]: delhivery,
   [stcourier.id]: stcourier,
+  [tpc.id]: tpc,
 };
 
 export function getCarrier(id: string): Carrier | undefined {

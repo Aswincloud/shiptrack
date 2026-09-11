@@ -5,6 +5,10 @@ Free, open-source shipment tracking for Indian and international couriers. Built
 Currently supports:
 
 - **Blue Dart** (India)
+- **Delhivery** (India)
+- **ST Courier** (India)
+- **The Professional Couriers** (India)
+- **Shiprocket** (any courier shipped via Shiprocket)
 
 More carriers coming — contributions welcome.
 
@@ -73,6 +77,29 @@ absence of the "Status of AWB No." heading — the page still returns HTTP 200.
 
 AWBs are numeric and capped at 11 digits by their form. ST Courier exposes no
 expected-delivery date, so `estimatedDelivery` is always unset.
+
+### The Professional Couriers (TPC)
+
+No credentials required. TPC's website tracker sits behind an image captcha,
+but the plain-text feed their mobile app reads does not:
+
+```
+GET https://www.tpcindia.com/TPCWebService/TrackMobDe.ashx?podno=<CONSIGNMENT>
+```
+
+It returns one block per scan (newest first) with a `DD/MM/YYYY` date, `Time`,
+`City`, `WayNo` and `Activity` line. An unknown or malformed number still
+answers HTTP 200 with just the `Forwarding Details :` header, which the carrier
+reports as `not_found`.
+
+The feed has no summary status, origin, destination or expected-delivery date,
+so `status` is derived from the newest activity text and `estimatedDelivery`
+is always unset. TPC often records the same scan twice under different
+`WayNo` bag references; those duplicates are collapsed.
+
+TPC also exposes `/TPCWebService/Track.ashx?client=&podno=&tpcpwd=`, gated by
+a corporate login issued by a TPC branch. Its response format is undocumented
+and it is not used.
 
 ### Delhivery
 
