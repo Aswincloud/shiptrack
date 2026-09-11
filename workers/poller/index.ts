@@ -57,13 +57,27 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
 
   const latest = result.events[result.events.length - 1];
   if (!latest) {
-    await markPolled(env.DB, w.id, { lastKnownStatus: result.status, estimatedDelivery: eta });
+    // Some carriers (notably ST Courier) surface a terminal state through their
+    // summary "Current Status" cell even when the scan timeline parses to zero
+    // events — e.g. an older delivered shipment whose detailed scans the carrier
+    // has since dropped. Only result.status carries it on this path, so run the
+    // terminal check off that. Without it the watch stays 'active' forever: it
+    // never moves to the dashboard's "Delivered" section and keeps polling.
+    await markPolled(env.DB, w.id, {
+      lastKnownStatus: result.status,
+      estimatedDelivery: eta,
+      complete: TERMINAL.has(result.status),
+    });
     return;
   }
 
   const hash = await sha256Hex(`${latest.timestamp}|${latest.rawCode ?? ""}|${latest.description}`);
   if (hash === w.last_event_hash) {
-    await markPolled(env.DB, w.id, { estimatedDelivery: eta });
+    // No new scan since last poll. Still re-affirm terminality so a watch that
+    // reached a terminal status without ever being marked complete (a pre-fix
+    // row, or one first seen via the no-event path above) self-heals instead of
+    // polling indefinitely. markPolled only flips status when complete is true.
+    await markPolled(env.DB, w.id, { estimatedDelivery: eta, complete: TERMINAL.has(latest.status) });
     return;
   }
 
