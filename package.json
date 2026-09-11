@@ -38,5 +38,9 @@
     "eslint-config-next": "^16.3.4",
     "typescript": "^5.7.0",
     "wrangler": "4.123.0"
+  },
+  "//overrides": "sharp <0.35.4 is a transitive dev-only dep (wrangler -> miniflare) flagged by GHSA-rgj7-g3m4-5g8c (libheif). next already resolves 0.35.4; this forces miniflare's nested copy up to match. Remove once wrangler ships a miniflare with sharp >=0.35.4.",
+  "overrides": {
+    "sharp": "^0.35.4"
   }
 }
