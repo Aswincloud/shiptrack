@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { TrackingResult } from "@/carriers/types";
 import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, statusPillStyle, intervalLabel } from "../styles";
@@ -99,7 +100,7 @@ export function DashboardClient({
           >
             + Watch an AWB
           </button>
-          <a
+          <Link
             href="/"
             style={{
               padding: "10px 18px",
@@ -113,7 +114,7 @@ export function DashboardClient({
             }}
           >
             Track a shipment
-          </a>
+          </Link>
         </div>
       </header>
 
@@ -126,7 +127,7 @@ export function DashboardClient({
             <div style={{ fontSize: 28, marginBottom: 8 }}>📦</div>
             <div style={{ fontWeight: 600, marginBottom: 4 }}>No watches yet</div>
             <div style={{ color: "var(--muted)", fontSize: 14 }}>
-              <a href="/">Track a shipment</a> and click &ldquo;Notify me on changes&rdquo; to add one.
+              <Link href="/">Track a shipment</Link> and click &ldquo;Notify me on changes&rdquo; to add one.
             </div>
           </div>
         ) : activeWatches.length === 0 ? (
