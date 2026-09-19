@@ -35,7 +35,10 @@ export interface AdminUserView {
   email_verified: number;
   is_admin: number;
   created_at: number;
+  // Live count of this user's active watches.
   watch_count: number;
+  // Lifetime count of watches the user has created; survives completion and purge.
+  watches_created: number;
 }
 
 export interface OtpRow {
@@ -77,13 +80,22 @@ export const MAX_OPEN_WATCHES_PER_USER = 50;
 export async function createWatch(db: D1Database, w: NewWatch): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const interval = w.pollIntervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS;
-  await db
+  const insert = db
     .prepare(
       `INSERT INTO watches (id, user_id, email, carrier, tracking_number, label, status, created_at, poll_interval_seconds)
        VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
     )
-    .bind(w.id, w.userId ?? null, w.email, w.carrier, w.trackingNumber, w.label ?? null, now, interval)
-    .run();
+    .bind(w.id, w.userId ?? null, w.email, w.carrier, w.trackingNumber, w.label ?? null, now, interval);
+  if (!w.userId) {
+    await insert.run();
+    return;
+  }
+  // Bump the owner's lifetime counter in the same transaction as the insert, so
+  // the two can't drift apart if either statement fails.
+  await db.batch([
+    insert,
+    db.prepare(`UPDATE users SET watches_created = watches_created + 1 WHERE id = ?`).bind(w.userId),
+  ]);
 }
 
 export async function getWatch(db: D1Database, id: string): Promise<WatchRow | null> {
@@ -416,7 +428,7 @@ export async function countAdmins(db: D1Database): Promise<number> {
 export async function listAllUsersForAdmin(db: D1Database): Promise<AdminUserView[]> {
   const res = await db
     .prepare(
-      `SELECT u.id, u.email, u.email_verified, u.is_admin, u.created_at,
+      `SELECT u.id, u.email, u.email_verified, u.is_admin, u.created_at, u.watches_created,
               COALESCE(COUNT(w.id), 0) AS watch_count
        FROM users u
        LEFT JOIN watches w ON w.user_id = u.id AND w.status = 'active'

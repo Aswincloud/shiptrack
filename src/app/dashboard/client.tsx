@@ -34,6 +34,7 @@ interface AdminUser {
   is_admin: number;
   created_at: number;
   watch_count: number;
+  watches_created: number;
 }
 
 export function DashboardClient({
@@ -860,7 +861,8 @@ function AdminSection({
               <tr style={{ color: "var(--muted)", fontSize: 12, textAlign: "left" }}>
                 <th style={th}>Email</th>
                 <th style={th}>Verified</th>
-                <th style={th}>Watches</th>
+                <th style={th}>Active</th>
+                <th style={th}>Total</th>
                 <th style={th}>Created</th>
                 <th style={th}></th>
               </tr>
@@ -876,7 +878,8 @@ function AdminSection({
                       <span style={{ color: "var(--muted)" }}>—</span>
                     )}
                   </td>
-                  <td style={td} data-label="Watches">{u.watch_count}</td>
+                  <td style={td} data-label="Active">{u.watch_count}</td>
+                  <td style={td} data-label="Total" title="Watches created, including delivered and cancelled">{u.watches_created}</td>
                   <td style={{ ...td, color: "var(--muted)", fontSize: 12 }} data-label="Created">
                     {new Date(u.created_at * 1000).toLocaleDateString()}
                   </td>
