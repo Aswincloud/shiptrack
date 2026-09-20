@@ -1,4 +1,5 @@
 import { Carrier } from "./types";
+import { amazon } from "./amazon";
 import { bluedart } from "./bluedart";
 import { shiprocket } from "./shiprocket";
 import { delhivery } from "./delhivery";
@@ -11,6 +12,7 @@ export const carriers: Record<string, Carrier> = {
   [delhivery.id]: delhivery,
   [stcourier.id]: stcourier,
   [tpc.id]: tpc,
+  [amazon.id]: amazon,
 };
 
 export function getCarrier(id: string): Carrier | undefined {

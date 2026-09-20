@@ -8,6 +8,7 @@ Currently supports:
 - **Delhivery** (India)
 - **ST Courier** (India)
 - **The Professional Couriers** (India)
+- **Amazon Shipping** (India)
 - **Shiprocket** (any courier shipped via Shiprocket)
 
 More carriers coming — contributions welcome.
@@ -100,6 +101,27 @@ is always unset. TPC often records the same scan twice under different
 TPC also exposes `/TPCWebService/Track.ashx?client=&podno=&tpcpwd=`, gated by
 a corporate login issued by a TPC branch. Its response format is undocumented
 and it is not used.
+
+### Amazon Shipping
+
+No credentials required. Amazon Shipping's public tracker at
+`https://track.amazon.in/` calls:
+
+```
+GET https://track.amazon.in/api/tracker/<TRACKING_ID>
+```
+
+`progressTracker` and `eventHistory` come back as JSON strings nested inside
+the JSON body. An unknown ID is still HTTP 200, with
+`errorCode: TRACKING_ID_NOT_FOUND` inside `progressTracker.errors`.
+
+This is the Amazon Shipping (India) courier ID — typically 10–18 digits — not
+an Amazon.in order number. The Selling Partner / Amazon Shipping v2 API is
+not used; it needs seller credentials and only covers shipments you purchased.
+
+Expected delivery is taken from `summary.metadata.expectedDeliveryDate` when
+present. Destination is omitted on the anonymous tracker (addresses are null
+until the recipient signs in).
 
 ### Delhivery
 
