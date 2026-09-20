@@ -65,8 +65,11 @@ function mapEventCode(code: string | undefined): ShipmentStatus {
   if (t.includes("undeliver") || t.includes("reject") || t.includes("attempt") || t.includes("hold")) {
     return "exception";
   }
-  if (t.includes("deliver") && !t.includes("ofd")) return "delivered";
+  // Must precede the "deliver" test: "OutForDelivery" contains "deliver", so
+  // checking delivered first reports an out-for-delivery parcel as delivered —
+  // a terminal status, which would complete the watch and email "delivered".
   if (t.includes("outfordelivery") || t === "ofd" || t.includes("out_for_delivery")) return "out_for_delivery";
+  if (t.includes("deliver")) return "delivered";
   if (t.includes("pickup") || t === "pickupdone") return "picked_up";
   if (
     t.includes("received") ||
@@ -191,10 +194,15 @@ export const amazon: Carrier = {
     const events = parseEvents(history?.eventHistory);
     const latest = events[events.length - 1];
     const meta = tracker?.summary?.metadata;
-    const status =
+    // Newest scan first, like the other carriers here: Amazon's summary can lag
+    // its own event feed. `mapEventCode` returns "unknown" rather than undefined,
+    // so each step has to be filtered explicitly — `??` alone would stop at the
+    // first "unknown" and never reach the later fallbacks.
+    const summaryStatus = mapEventCode(tracker?.summary?.status ?? undefined);
+    const status: ShipmentStatus =
+      (latest && latest.status !== "unknown" ? latest.status : undefined) ??
       mapTrackingStatus(meta?.trackingStatus?.stringValue) ??
-      mapEventCode(tracker?.summary?.status ?? undefined) ??
-      latest?.status ??
+      (summaryStatus !== "unknown" ? summaryStatus : undefined) ??
       "unknown";
 
     if (!latest && status === "unknown") {
