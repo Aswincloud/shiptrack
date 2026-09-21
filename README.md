@@ -9,7 +9,7 @@ Currently supports:
 - **ST Courier** (India)
 - **The Professional Couriers** (India)
 - **Amazon Shipping** (India)
-- **Shiprocket** (any courier shipped via Shiprocket)
+- **Shiprocket** (couriers shipped via Shiprocket)
 
 More carriers coming — contributions welcome.
 

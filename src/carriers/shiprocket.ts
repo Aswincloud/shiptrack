@@ -79,7 +79,7 @@ function parseScans(html: string): TrackingEvent[] {
 
 export const shiprocket: Carrier = {
   id: "shiprocket",
-  name: "Shiprocket (any courier)",
+  name: "Shiprocket",
   async track(trackingNumber: string): Promise<TrackingResult> {
     const cleaned = trackingNumber.trim();
     if (!/^[A-Za-z0-9-]{6,30}$/.test(cleaned)) {

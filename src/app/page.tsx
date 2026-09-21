@@ -146,7 +146,7 @@ export default function Home() {
           style={{ ...inputStyle, border: "none", background: "transparent", fontWeight: 500 }}
         >
           <option value="bluedart">Blue Dart</option>
-          <option value="shiprocket">Shiprocket (any courier)</option>
+          <option value="shiprocket">Shiprocket</option>
           <option value="delhivery">Delhivery</option>
           <option value="stcourier">ST Courier</option>
           <option value="tpc">Professional Couriers (TPC)</option>
