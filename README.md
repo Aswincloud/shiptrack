@@ -164,6 +164,21 @@ When a watch is active, a scheduled worker polls every 15 minutes, diffs the lat
 
 Notifier registry (`src/notifiers/`) is pluggable — email (Resend) is implemented; `webhook` / `sms` / `slack` / `telegram` are registered stubs for later.
 
+### Polling behaviour
+
+The poller (`workers/poller`) runs every 15 minutes and fetches up to 50 due
+watches per tick, with at most 5 concurrent fetches per carrier so a burst of
+Blue Dart watches can't get the scraper rate-limited.
+
+A watch whose poll fails (carrier error, upstream outage, AWB the carrier
+doesn't know yet) backs off exponentially: its interval is multiplied by
+2^`poll_failures`, capped at 96x — one fetch a day at the 15-minute minimum.
+The counter resets on the next successful poll.
+
+A watch that has never produced a single scan 30 days after it was confirmed
+is retired (marked cancelled) and its owner is emailed once. This needs
+migration `0013_poll_failures.sql`.
+
 ### Add / remove a watch (curl)
 
 ```bash

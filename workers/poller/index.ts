@@ -1,5 +1,14 @@
 import type { D1Database, ScheduledController, ExecutionContext } from "@cloudflare/workers-types";
-import { listDueWatches, markPolled, recordEvent, purgeDeliveredWatches, type WatchRow } from "../../src/lib/db";
+import {
+  cancelWatch,
+  listDueWatches,
+  markPolled,
+  recordEvent,
+  purgeDeliveredWatches,
+  DEAD_WATCH_SECONDS,
+  type WatchRow,
+} from "../../src/lib/db";
+import { sendEmail, watchExpiredEmail } from "../../src/lib/email";
 import { signToken } from "../../src/lib/tokens";
 import { getCarrier } from "../../src/carriers/registry";
 import { emailResend } from "../../src/notifiers/email-resend";
@@ -15,6 +24,10 @@ interface Env {
 }
 
 const BATCH_SIZE = 50;
+// Simultaneous fetches per carrier. A tick used to fire every due watch at
+// once — 50 parallel hits on one tracking page is exactly how the scrapers get
+// rate-limited, and one 429 then fails every watch in the batch.
+const MAX_CONCURRENCY_PER_CARRIER = 5;
 const TERMINAL = new Set(["delivered", "returned"]);
 // Delivered/returned watches are purged this long after completion.
 const PURGE_GRACE_SECONDS = 7 * 24 * 60 * 60;
@@ -41,13 +54,29 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
     return;
   }
 
+  // A watch that has never produced a scan after DEAD_WATCH_SECONDS is a
+  // mistyped AWB or a shipment that was never booked. Stop polling it (as a
+  // cancellation — the dashboard already renders that state) and tell the
+  // owner once. Checked after the carrier lookup so a poller bundle that
+  // merely predates the carrier can never retire a legitimate watch.
+  const now = Math.floor(Date.now() / 1000);
+  const since = w.confirmed_at ?? w.created_at;
+  if (w.last_known_status === null && now - since >= DEAD_WATCH_SECONDS) {
+    await expireDeadWatch(env, w);
+    return;
+  }
+
   let result;
   try {
     result = await carrier.track(w.tracking_number, { delhiveryToken: env.DELHIVERY_API_TOKEN });
   } catch (err) {
     const code = err instanceof CarrierError ? err.code : "unknown";
-    console.warn(`poll failed for ${w.id} (${w.carrier}/${w.tracking_number}): ${code}`);
-    await markPolled(env.DB, w.id);
+    // Bump poll_failures so listDueWatches() backs this watch off exponentially
+    // (up to 24h at the 15-minute minimum) instead of re-fetching every tick.
+    console.warn(
+      `poll failed for ${w.id} (${w.carrier}/${w.tracking_number}): ${code} — failure #${w.poll_failures + 1}, backing off`,
+    );
+    await markPolled(env.DB, w.id, { pollOutcome: "failed" });
     return;
   }
 
@@ -67,6 +96,7 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
       lastKnownStatus: result.status,
       estimatedDelivery: eta,
       complete: TERMINAL.has(result.status),
+      pollOutcome: "ok",
     });
     return;
   }
@@ -77,7 +107,11 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
     // reached a terminal status without ever being marked complete (a pre-fix
     // row, or one first seen via the no-event path above) self-heals instead of
     // polling indefinitely. markPolled only flips status when complete is true.
-    await markPolled(env.DB, w.id, { estimatedDelivery: eta, complete: TERMINAL.has(latest.status) });
+    await markPolled(env.DB, w.id, {
+      estimatedDelivery: eta,
+      complete: TERMINAL.has(latest.status),
+      pollOutcome: "ok",
+    });
     return;
   }
 
@@ -114,7 +148,45 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
     lastEventHash: hash,
     estimatedDelivery: eta,
     complete,
+    pollOutcome: "ok",
   });
+}
+
+async function expireDeadWatch(env: Env, w: WatchRow): Promise<void> {
+  const days = Math.round(DEAD_WATCH_SECONDS / 86400);
+  console.warn(`watch ${w.id} (${w.carrier}/${w.tracking_number}) has had no scan in ${days} days — retiring it`);
+  // cancelWatch() is a no-op if the user cancelled it meanwhile; only mail on
+  // the actual transition so nobody gets this twice.
+  const changed = await cancelWatch(env.DB, w.id);
+  if (!changed) return;
+  try {
+    const msg = watchExpiredEmail({
+      appUrl: env.APP_URL.replace(/\/$/, ""),
+      carrier: w.carrier,
+      trackingNumber: w.tracking_number,
+      label: w.label,
+      days,
+    });
+    await sendEmail(
+      { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
+      { to: w.email, ...msg },
+    );
+  } catch (err) {
+    console.error(`expiry notice failed for ${w.id}:`, err instanceof Error ? err.message : err);
+  }
+}
+
+// Run `fn` over `items` with at most `limit` in flight. Errors are the
+// caller's to catch inside `fn`; a rejection here would only stall one lane.
+async function runPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const lanes = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await fn(item);
+    }
+  });
+  await Promise.allSettled(lanes);
 }
 
 export default {
@@ -134,7 +206,20 @@ export default {
     const due = await listDueWatches(env.DB, now, BATCH_SIZE);
     if (due.length === 0) return;
     console.log(`polling ${due.length} watches`);
-    const tasks = due.map((w) => processWatch(env, w).catch((e) => console.error(`watch ${w.id}:`, e)));
-    ctx.waitUntil(Promise.allSettled(tasks).then(() => undefined));
+
+    // Carriers run in parallel with each other; within a carrier at most
+    // MAX_CONCURRENCY_PER_CARRIER fetches are in flight at once.
+    const byCarrier = new Map<string, WatchRow[]>();
+    for (const w of due) {
+      const group = byCarrier.get(w.carrier);
+      if (group) group.push(w);
+      else byCarrier.set(w.carrier, [w]);
+    }
+    const lanes = [...byCarrier.values()].map((group) =>
+      runPool(group, MAX_CONCURRENCY_PER_CARRIER, (w) =>
+        processWatch(env, w).catch((e) => console.error(`watch ${w.id}:`, e)),
+      ),
+    );
+    ctx.waitUntil(Promise.allSettled(lanes).then(() => undefined));
   },
 };

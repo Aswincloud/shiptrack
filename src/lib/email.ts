@@ -313,6 +313,31 @@ export function watchCreatedEmail(args: {
   return { subject, html, text };
 }
 
+// Sent once when the poller gives up on a watch that never produced a scan.
+export function watchExpiredEmail(args: {
+  appUrl: string;
+  carrier: string;
+  trackingNumber: string;
+  label?: string | null;
+  days: number;
+}): { subject: string; html: string; text: string } {
+  const ref = args.label ? `${args.label} (${args.trackingNumber})` : args.trackingNumber;
+  const subject = `Stopped watching ${ref}`;
+  const html = shell({
+    preheader: `No scans in ${args.days} days, so we stopped checking this shipment.`,
+    heading: "We stopped watching this shipment",
+    accent: "#d97706",
+    bodyHtml: `
+      <p style="margin:0 0 14px;">${escapeHtml(humanStatus(args.carrier))} hasn't reported a single scan for this shipment in ${args.days} days, so we've stopped checking it. This usually means the tracking number was mistyped or the shipment was never booked.</p>
+      ${shipmentCard(args)}
+      <p style="margin:0 0 18px;color:#94a3b8;font-size:13px;">If the parcel is real, double-check the number with the sender and add it again from your dashboard.</p>
+      ${button(`${args.appUrl}/dashboard`, "Open dashboard")}
+    `,
+  });
+  const text = `We stopped watching ${args.carrier} ${args.trackingNumber}: no scans in ${args.days} days. If the parcel is real, check the number and add it again at ${args.appUrl}/dashboard`;
+  return { subject, html, text };
+}
+
 export function accountDeletedEmail(args: { appUrl: string }): {
   subject: string;
   html: string;
