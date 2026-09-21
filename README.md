@@ -156,11 +156,51 @@ anything shorter or containing letters, which this carrier reports as
 
 That's it — the API route and UI pick it up automatically.
 
-## Alerts (owner-only for now)
+## Alerts
 
-The site is read-only for visitors — anyone can paste a tracking number and see the current status. Scheduled alerts are gated behind an `ADMIN_TOKEN`, so only the operator can register a watch. Public signup + per-user accounts will come later.
+Anyone can paste a tracking number and see the current status without an
+account. A *watch* — the thing that emails you when the status changes — is
+registered one of three ways:
+
+1. **Signed in.** The "Notify me on changes" box on the home page and the
+   dashboard's "Watch an AWB". A watch pointed at your own account address is
+   active immediately; one pointed at anybody else's has to be confirmed by
+   that recipient first.
+2. **Signed out, from a track page.** A shared `/track/{carrier}/{number}`
+   link that comes back "no tracking information found" offers to watch the
+   number — enter an email and we'll alert you when it appears. See
+   [Guest watch requests](#guest-watch-requests).
+3. **`ADMIN_TOKEN` curl.** The operator's own flow, below.
 
 When a watch is active, a scheduled worker polls every 15 minutes, diffs the latest event, and emails the configured address via Resend on any change. Every alert email has a one-click unsubscribe link.
+
+### Guest watch requests
+
+A number the carrier doesn't know is usually one it hasn't ingested yet
+(freshly booked shipments take hours to appear), so the not-found state on a
+track page is a form rather than a dead end. Requiring an account there loses
+the person who followed a shared link, so it doesn't.
+
+Nobody has proved they own the address they typed, so a guest request is
+always double opt-in: the watch is created `pending`, a confirmation link goes
+out, and the poller ignores it until that link is clicked. Three limits bound
+what the form can be made to send (all in `src/lib/db.ts`):
+
+- a repeat request for the same address + shipment returns the existing watch
+  instead of mailing the link again;
+- `MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY` (5) requests per address per day;
+- `MAX_GUEST_WATCHES_PER_HOUR` (30) guest requests site-wide per hour, which
+  caps an address-enumeration run at the cost of asking a real visitor to come
+  back later during a flood.
+
+Guest watches also always take the default 15-minute poll interval — the
+request body's `pollIntervalSeconds` is ignored for them.
+
+Because these watches have no owning account (`user_id IS NULL`), no user
+dashboard shows them. The admin dashboard lists them under **Guest watch
+requests**, newest first, with whether each one has been confirmed; the same
+data is at `GET /api/admin/watches`. Watches registered through `ADMIN_TOKEN`
+are ownerless too, so they appear in that list as well.
 
 Notifier registry (`src/notifiers/`) is pluggable — email (Resend) is implemented; `webhook` / `sms` / `slack` / `telegram` are registered stubs for later.
 
@@ -197,6 +237,10 @@ curl -X POST https://your-app.workers.dev/api/watches \
 wrangler d1 execute shiptrack --remote \
   --command "UPDATE watches SET status='cancelled' WHERE id='<watch-id>'"
 ```
+
+A bearer token that doesn't match `ADMIN_TOKEN` is rejected rather than
+quietly downgraded to a guest request, so a typo'd token fails loudly instead
+of silently creating a watch that waits on a confirmation email.
 
 ### Setup
 

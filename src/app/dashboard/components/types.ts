@@ -23,6 +23,21 @@ export interface AdminUser {
   watches_created: number;
 }
 
+// A watch with no owning account: requested by a signed-out visitor from a
+// track page, or registered through the ADMIN_TOKEN curl flow.
+export interface AdminWatchRequest {
+  id: string;
+  email: string;
+  carrier: string;
+  tracking_number: string;
+  label: string | null;
+  status: string;
+  last_known_status: string | null;
+  created_at: number;
+  confirmed_at: number | null;
+  last_polled_at: number | null;
+}
+
 export interface CarrierOption {
   id: string;
   name: string;

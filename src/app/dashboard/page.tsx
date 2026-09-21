@@ -5,6 +5,7 @@ import {
   getUserById,
   listWatchesByUser,
   listAllUsersForAdmin,
+  listWatchRequestsForAdmin,
   type WatchRow,
 } from "@/lib/db";
 import { DashboardClient } from "./client";
@@ -25,7 +26,9 @@ export default async function DashboardPage() {
 
   const watches = await listWatchesByUser(env.DB, sess.userId);
   const isAdmin = user.is_admin === 1;
-  const adminUsers = isAdmin ? await listAllUsersForAdmin(env.DB) : null;
+  const [adminUsers, adminWatchRequests] = isAdmin
+    ? await Promise.all([listAllUsersForAdmin(env.DB), listWatchRequestsForAdmin(env.DB)])
+    : [null, null];
 
   return (
     <DashboardClient
@@ -33,6 +36,7 @@ export default async function DashboardPage() {
       initialWatches={watches.map(serializeWatch)}
       isAdmin={isAdmin}
       adminUsers={adminUsers}
+      adminWatchRequests={adminWatchRequests}
     />
   );
 }

@@ -43,6 +43,20 @@ export interface AdminUserView {
   watches_created: number;
 }
 
+// A watch with no owning account, as shown in the admin dashboard.
+export interface AdminWatchRequestView {
+  id: string;
+  email: string;
+  carrier: string;
+  tracking_number: string;
+  label: string | null;
+  status: WatchRow["status"];
+  last_known_status: string | null;
+  created_at: number;
+  confirmed_at: number | null;
+  last_polled_at: number | null;
+}
+
 export interface OtpRow {
   email: string;
   code_hash: string;
@@ -88,6 +102,19 @@ export const DEAD_WATCH_SECONDS = 30 * 24 * 60 * 60;
 // active). Bounds the mail a single account can generate and keeps one user
 // from monopolising the poller, which handles 50 watches per 15-minute tick.
 export const MAX_OPEN_WATCHES_PER_USER = 50;
+
+// Caps for watches requested by signed-out visitors (user_id IS NULL). Every
+// such request mails a confirmation link to an address nobody has proved they
+// own, so the two limits below bound how much mail one address — and the site
+// as a whole — can be made to send. Per-address stops one inbox being buried;
+// the global hourly ceiling stops an address-enumeration run from turning
+// ShipTrack into a mailer, at the cost of asking a legitimate visitor to come
+// back later during a flood.
+export const MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY = 5;
+export const MAX_GUEST_WATCHES_PER_HOUR = 30;
+
+// How many guest/operator watch requests the admin dashboard lists at once.
+export const ADMIN_WATCH_REQUEST_LIMIT = 200;
 
 export async function createWatch(db: D1Database, w: NewWatch): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -160,6 +187,76 @@ export async function countOpenWatchesForUser(db: D1Database, userId: string): P
     .bind(userId)
     .first<{ n: number }>();
   return row?.n ?? 0;
+}
+
+// An in-flight watch this address already has for the same shipment. Used to
+// answer a repeat guest request with "we already emailed you" instead of
+// sending the same confirmation link again.
+export async function findOpenGuestWatch(
+  db: D1Database,
+  email: string,
+  carrier: string,
+  trackingNumber: string,
+): Promise<WatchRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT * FROM watches
+       WHERE user_id IS NULL AND email = ? AND carrier = ? AND tracking_number = ?
+         AND status IN ('pending','active')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+    )
+    .bind(email, carrier, trackingNumber)
+    .first<WatchRow>();
+  return row ?? null;
+}
+
+// Guest requests made for one address since `since` (unix seconds). Cancelled
+// and completed rows count: they still cost the recipient an email.
+export async function countGuestWatchesForEmailSince(
+  db: D1Database,
+  email: string,
+  since: number,
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM watches
+       WHERE user_id IS NULL AND email = ? AND created_at >= ?`,
+    )
+    .bind(email, since)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+// Guest requests made site-wide since `since` (unix seconds).
+export async function countGuestWatchesSince(db: D1Database, since: number): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM watches WHERE user_id IS NULL AND created_at >= ?`)
+    .bind(since)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+// Watches with no owning account: requested by signed-out visitors from a
+// track page, or registered by the operator's ADMIN_TOKEN curl flow. Nobody
+// sees these on a dashboard of their own, so the admin view is the only place
+// they surface.
+export async function listWatchRequestsForAdmin(
+  db: D1Database,
+  limit: number = ADMIN_WATCH_REQUEST_LIMIT,
+): Promise<AdminWatchRequestView[]> {
+  const res = await db
+    .prepare(
+      `SELECT id, email, carrier, tracking_number, label, status, last_known_status,
+              created_at, confirmed_at, last_polled_at
+       FROM watches
+       WHERE user_id IS NULL
+       ORDER BY created_at DESC
+       LIMIT ?`,
+    )
+    .bind(limit)
+    .all<AdminWatchRequestView>();
+  return res.results ?? [];
 }
 
 // Send a watch back to 'pending' — used when its notify address is repointed at
