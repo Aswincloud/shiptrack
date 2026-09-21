@@ -1,4 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
+import { carryForwardStatus, overallStatus } from "./normalize";
 
 // ST Courier (stcourier.com) publishes no developer API — no docs, no keys, no
 // portal. Their own site tracks via a two-step CodeIgniter flow that we
@@ -128,12 +129,14 @@ function parseScans(html: string): TrackingEvent[] {
   // Callers require oldest-first (events[last] = latest).
   const times = events.map((e) => Date.parse(e.timestamp));
   if (times.every((t) => Number.isFinite(t))) {
-    return events
-      .map((e, i) => ({ e, t: times[i] }))
-      .sort((a, b) => a.t - b.t)
-      .map(({ e }) => e);
+    return carryForwardStatus(
+      events
+        .map((e, i) => ({ e, t: times[i] }))
+        .sort((a, b) => a.t - b.t)
+        .map(({ e }) => e),
+    );
   }
-  return events;
+  return carryForwardStatus(events);
 }
 
 // Cloudflare Workers and Node expose getSetCookie(); fall back to the folded
@@ -214,8 +217,6 @@ export const stcourier: Carrier = {
     const current = fieldByLabel(html, "Current Status");
     const origin = fieldByLabel(html, "Orgin SRC") ?? fieldByLabel(html, "Origin SRC");
     const destination = fieldByLabel(html, "Destination");
-    const latest = events[events.length - 1];
-
     return {
       carrier: "stcourier",
       trackingNumber: cleaned,
@@ -223,7 +224,7 @@ export const stcourier: Carrier = {
       // its own timeline — it still read "In Transit" while the latest scan was
       // already "Out for Delivery" — so it's only a fallback when there are no
       // scans to read.
-      status: latest ? latest.status : current ? mapStatus(current) : "unknown",
+      status: overallStatus(events, current ? mapStatus(current) : undefined),
       origin,
       destination,
       events,

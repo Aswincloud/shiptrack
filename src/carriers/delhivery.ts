@@ -6,6 +6,7 @@ import {
   TrackingResult,
   TrackOptions,
 } from "./types";
+import { carryForwardStatus, overallStatus } from "./normalize";
 
 // Delhivery is tracked from two sources, best-first.
 //
@@ -115,7 +116,7 @@ function parseScans(scans: Array<{ ScanDetail?: ScanDetail }> | undefined): Trac
     });
   }
   // Delhivery returns scans oldest-first; keep that so events[last] is latest.
-  return events;
+  return carryForwardStatus(events);
 }
 
 // Returns null when the AWB simply isn't under this account, so the caller can
@@ -154,12 +155,10 @@ async function trackViaToken(cleaned: string, token: string): Promise<TrackingRe
 
   const events = parseScans(shipment.Scans);
   const topStatus = shipment.Status;
-  const latest = events[events.length - 1];
-  const status: ShipmentStatus = topStatus?.Status || topStatus?.StatusType
-    ? mapStatus(topStatus.StatusType, topStatus.Status)
-    : latest
-      ? latest.status
-      : "unknown";
+  // The account API's top-level Status is authoritative when it maps; otherwise
+  // fall back to the newest known scan.
+  const top = topStatus?.Status || topStatus?.StatusType ? mapStatus(topStatus.StatusType, topStatus.Status) : undefined;
+  const status: ShipmentStatus = top && top !== "unknown" ? top : overallStatus(events, top);
 
   return {
     carrier: "delhivery",
@@ -245,7 +244,7 @@ function parsePublicEvents(d: PublicShipment): TrackingEvent[] {
     }
   }
 
-  return events;
+  return carryForwardStatus(events);
 }
 
 async function trackViaPublic(cleaned: string): Promise<TrackingResult> {
@@ -282,12 +281,10 @@ async function trackViaPublic(cleaned: string): Promise<TrackingResult> {
   if (!d) throw new CarrierError("Tracking number not found", "not_found", 404);
 
   const events = parsePublicEvents(d);
-  const latest = events[events.length - 1];
-
   return {
     carrier: "delhivery",
     trackingNumber: cleaned,
-    status: latest ? latest.status : mapStatus(d.status?.statusType, d.status?.status),
+    status: overallStatus(events, mapStatus(d.status?.statusType, d.status?.status)),
     // deliveryDate is the human string their page shows ("12 Sep 2026, Evening");
     // promiseDeliveryDate is the ISO backstop.
     estimatedDelivery: d.deliveryDate || d.promiseDeliveryDate || undefined,
