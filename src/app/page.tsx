@@ -12,6 +12,7 @@ import { ShareButton } from "./components/ShareButton";
 import { CopyButton } from "./components/CopyButton";
 import { ResultSkeleton } from "./components/ResultSkeleton";
 import { IntervalPicker } from "./components/IntervalPicker";
+import { WatchRequestForm } from "./components/WatchRequestForm";
 
 const DEFAULT_INTERVAL_SECONDS = 15 * 60;
 const LAST_CARRIER_KEY = "shiptrack:last-carrier";
@@ -388,13 +389,23 @@ export default function Home() {
               Not in {labelForCarrier(notFound.carrier)}&rsquo;s system yet
             </div>
             <div style={{ fontSize: 13, color: "var(--fg-soft)", lineHeight: 1.5 }}>
-              Freshly-booked shipments can take a few hours to a day to appear. Add
-              it to your watchlist and we&rsquo;ll email you the moment it shows up
-              and on every change after.
+              Freshly-booked shipments can take a few hours to a day to appear. Leave
+              an email and we&rsquo;ll check this number every hour for the next couple
+              of days — less often after that — and mail you as soon as it shows up,
+              then on every change after.
             </div>
           </div>
           <div style={{ padding: "4px 4px 0" }}>
-            <NotifyForm carrier={notFound.carrier} trackingNumber={notFound.tracking} embedded />
+            {/* Not NotifyForm: that one sends signed-out visitors to the signup
+                page, which is a dead end for someone who came here from a
+                shared link. This form takes an email from anyone and confirms
+                it by mail. */}
+            <WatchRequestForm
+              carrier={notFound.carrier}
+              carrierName={labelForCarrier(notFound.carrier)}
+              trackingNumber={notFound.tracking}
+              embedded
+            />
           </div>
         </div>
       )}

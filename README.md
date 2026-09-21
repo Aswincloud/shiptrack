@@ -166,10 +166,10 @@ registered one of three ways:
    dashboard's "Watch an AWB". A watch pointed at your own account address is
    active immediately; one pointed at anybody else's has to be confirmed by
    that recipient first.
-2. **Signed out, from a track page.** A shared `/track/{carrier}/{number}`
-   link that comes back "no tracking information found" offers to watch the
-   number — enter an email and we'll alert you when it appears. See
-   [Guest watch requests](#guest-watch-requests).
+2. **Signed out.** Wherever a lookup comes back "not found" — a shared
+   `/track/{carrier}/{number}` link, or the home page's own search — the
+   result is a form rather than a dead end: enter an email and we'll alert you
+   when the number appears. See [Guest watch requests](#guest-watch-requests).
 3. **`ADMIN_TOKEN` curl.** The operator's own flow, below.
 
 When a watch is active, a scheduled worker polls every 15 minutes, diffs the latest event, and emails the configured address via Resend on any change. Every alert email has a one-click unsubscribe link.
@@ -177,9 +177,11 @@ When a watch is active, a scheduled worker polls every 15 minutes, diffs the lat
 ### Guest watch requests
 
 A number the carrier doesn't know is usually one it hasn't ingested yet
-(freshly booked shipments take hours to appear), so the not-found state on a
-track page is a form rather than a dead end. Requiring an account there loses
-the person who followed a shared link, so it doesn't.
+(freshly booked shipments take hours to appear), so the not-found state is a
+form rather than a dead end. Requiring an account there loses the person who
+followed a shared link, so it doesn't. A found shipment still routes
+signed-out visitors to signup — the guest path exists for the case where
+there's nothing to show them.
 
 Nobody has proved they own the address they typed, so a guest request is
 always double opt-in: the watch is created `pending`, a confirmation link goes
@@ -215,9 +217,23 @@ doesn't know yet) backs off exponentially: its interval is multiplied by
 2^`poll_failures`, capped at 96x — one fetch a day at the 15-minute minimum.
 The counter resets on the next successful poll.
 
+That doubling is wrong for the one watch it hits hardest: the pre-watch
+registered *because* the carrier didn't know the number yet. Every poll fails
+until the shipment is ingested, so plain backoff reaches 8h within half a day
+and the 24h cap after about 32 hours — "we'll tell you when it appears"
+becomes "some time tomorrow". So while a watch has never produced a scan and
+is under `UNSCANNED_FAST_WINDOW_SECONDS` (48h) old, its effective interval is
+clamped to `UNSCANNED_MAX_INTERVAL_SECONDS` (1h), or to its own interval if
+the owner picked something slower. Past that window the normal cap takes over:
+a number still missing after two days is likelier mistyped than early.
+
 A watch that has never produced a single scan 30 days after it was confirmed
 is retired (marked cancelled) and its owner is emailed once. This needs
 migration `0013_poll_failures.sql`.
+
+Both rules live in `listDueWatches()` in `src/lib/db.ts`, which the poller
+worker bundles — so changing them needs a **poller** deploy, not just a web
+one.
 
 ### Add / remove a watch (curl)
 

@@ -22,10 +22,14 @@ export function WatchRequestForm({
   carrier,
   carrierName,
   trackingNumber,
+  embedded = false,
 }: {
   carrier: string;
   carrierName: string;
   trackingNumber: string;
+  // Host card already explains what this is (the home page's "not in their
+  // system yet" panel), so drop our own heading and blurb.
+  embedded?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [label, setLabel] = useState("");
@@ -82,14 +86,19 @@ export function WatchRequestForm({
 
   return (
     <div>
-      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
-        Want to know when it appears?
-      </div>
-      <div style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
-        Freshly-booked shipments can take a few hours to show up at {carrierName}. Leave your
-        email and we&rsquo;ll watch this number for you — you&rsquo;ll get a note the moment it
-        appears, and on every change after. One-click unsubscribe in every email.
-      </div>
+      {!embedded && (
+        <>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
+            Want to know when it appears?
+          </div>
+          <div style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
+            Freshly-booked shipments can take a few hours to show up at {carrierName}. Leave your
+            email and we&rsquo;ll check this number every hour for the next couple of days — less
+            often after that — and mail you as soon as it appears, then on every change after.
+            One-click unsubscribe in every email.
+          </div>
+        </>
+      )}
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input
