@@ -16,6 +16,8 @@ export interface WatchRow {
   confirmed_at: number | null;
   completed_at: number | null;
   poll_interval_seconds: number;
+  // Consecutive failed polls; drives the backoff in listDueWatches().
+  poll_failures: number;
 }
 
 export interface UserRow {
@@ -71,6 +73,16 @@ export const MAX_POLL_INTERVAL_SECONDS = 12 * 60 * 60;
 // 886-900s apart, polls completing 3-5s in. 60s absorbs both, and stays well
 // under one tick so nothing can be polled twice.
 export const POLL_TICK_GRACE_SECONDS = 60;
+
+// Backoff for watches whose polls keep failing. The effective interval is
+// poll_interval_seconds * min(2^poll_failures, MAX_POLL_BACKOFF_MULTIPLIER), so
+// at the 15-minute minimum a persistently failing watch settles at one fetch a
+// day (96 * 15 min = 24 h) instead of hammering the carrier every tick.
+export const MAX_POLL_BACKOFF_MULTIPLIER = 96;
+
+// A watch that has never produced a single scan after this long is treated as
+// dead (mistyped AWB, shipment never booked) and stops being polled.
+export const DEAD_WATCH_SECONDS = 30 * 24 * 60 * 60;
 
 // Ceiling on how many shipments one account can have in flight (pending +
 // active). Bounds the mail a single account can generate and keeps one user
@@ -220,15 +232,21 @@ export async function listDueWatches(
   // immediately. The grace exists because the cron period and the shortest
   // allowed interval are both 15 minutes: without it, an interval of exactly
   // 900s lands just short on every tick and halves the real polling rate.
+  //
+  // Failing watches back off: the interval is multiplied by 2^poll_failures,
+  // capped at MAX_POLL_BACKOFF_MULTIPLIER. SQLite has no POWER(), but it does
+  // have a bit-shift, and 1 << 7 already exceeds the cap, so the inner MIN
+  // keeps the shift bounded and the outer MIN applies the cap.
   const res = await db
     .prepare(
       `SELECT * FROM watches
        WHERE status='active'
-         AND (last_polled_at IS NULL OR (? - last_polled_at) >= poll_interval_seconds - ?)
+         AND (last_polled_at IS NULL
+              OR (? - last_polled_at) >= poll_interval_seconds * MIN(1 << MIN(poll_failures, 7), ?) - ?)
        ORDER BY last_polled_at ASC NULLS FIRST
        LIMIT ?`,
     )
-    .bind(now, POLL_TICK_GRACE_SECONDS, batchSize)
+    .bind(now, MAX_POLL_BACKOFF_MULTIPLIER, POLL_TICK_GRACE_SECONDS, batchSize)
     .all<WatchRow>();
   return res.results ?? [];
 }
@@ -246,11 +264,20 @@ export async function markPolled(
     // Shipment reached a terminal state (delivered/returned). Stops further
     // polling but is distinct from a user-initiated cancellation.
     complete?: boolean;
+    // "ok" resets the failure counter, "failed" bumps it (and so the backoff).
+    // Omit to leave the counter alone — e.g. the poller bundle doesn't know
+    // the carrier yet, which is a deploy gap, not a carrier failure.
+    pollOutcome?: "ok" | "failed";
   } = {},
 ): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const fields: string[] = ["last_polled_at = ?"];
   const values: (string | number | null)[] = [now];
+  if (updates.pollOutcome === "ok") {
+    fields.push("poll_failures = 0");
+  } else if (updates.pollOutcome === "failed") {
+    fields.push("poll_failures = poll_failures + 1");
+  }
   if (updates.lastKnownStatus !== undefined) {
     fields.push("last_known_status = ?");
     values.push(updates.lastKnownStatus);
