@@ -201,3 +201,19 @@ h1, h2, h3 {
     max-width: 100%;
   }
 }
+
+/* Loading placeholder blocks (see components/ResultSkeleton.tsx). */
+.skeleton {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--neutral-bg) 25%, var(--border) 50%, var(--neutral-bg) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}

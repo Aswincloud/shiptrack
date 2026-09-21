@@ -1,14 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { TrackingResult } from "@/carriers/types";
-import { inputStyle, buttonStyle, cardStyle, statusPillStyle } from "./styles";
+import { AUTO_CARRIER, detectCarriers } from "@/carriers/detect";
+import { humanStatus } from "@/lib/status";
+import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, statusPillStyle } from "./styles";
 import { Timeline } from "./components/Timeline";
 import { ShareButton } from "./components/ShareButton";
+import { CopyButton } from "./components/CopyButton";
+import { ResultSkeleton } from "./components/ResultSkeleton";
 import { IntervalPicker } from "./components/IntervalPicker";
 
 const DEFAULT_INTERVAL_SECONDS = 15 * 60;
+const LAST_CARRIER_KEY = "shiptrack:last-carrier";
 
 const CARRIER_LABELS: Record<string, string> = {
   bluedart: "Blue Dart",
@@ -21,41 +26,185 @@ const CARRIER_LABELS: Record<string, string> = {
 function labelForCarrier(id: string): string {
   return CARRIER_LABELS[id] ?? id;
 }
+function isKnownCarrier(id: string): boolean {
+  return id === AUTO_CARRIER || id in CARRIER_LABELS;
+}
+function listLabels(ids: string[]): string {
+  const names = ids.map(labelForCarrier);
+  return names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+}
+
+type ApiFailure = { error?: string; message?: string };
+type LookupOutcome =
+  | { ok: true; carrier: string; result: TrackingResult }
+  | { ok: false; carrier: string; status: number; body: ApiFailure };
+
+async function lookupOne(carrierId: string, tracking: string): Promise<LookupOutcome> {
+  const res = await fetch(`/api/track/${encodeURIComponent(carrierId)}/${encodeURIComponent(tracking)}`);
+  const body = await res.json().catch(() => ({}));
+  return res.ok
+    ? { ok: true, carrier: carrierId, result: body as TrackingResult }
+    : { ok: false, carrier: carrierId, status: res.status, body: body as ApiFailure };
+}
+
+// Resolve as soon as any candidate succeeds; otherwise collect every failure.
+function firstSuccess(lookups: Promise<LookupOutcome>[]): Promise<{ hit: LookupOutcome | null; failures: LookupOutcome[] }> {
+  return new Promise((resolve) => {
+    const failures: LookupOutcome[] = [];
+    let pending = lookups.length;
+    for (const p of lookups) {
+      p.then(
+        (o) => {
+          if (o.ok) return resolve({ hit: o, failures });
+          failures.push(o);
+          if (--pending === 0) resolve({ hit: null, failures });
+        },
+        () => {
+          failures.push({ ok: false, carrier: "", status: 0, body: { error: "network" } });
+          if (--pending === 0) resolve({ hit: null, failures });
+        },
+      );
+    }
+  });
+}
+
+// Turn API error codes into copy a person can act on. Carrier-specific
+// invalid_input messages are already good, so those pass through.
+function describeFailure(f: LookupOutcome & { ok: false }, carrierId: string): { msg: string; retry: boolean } {
+  const name = labelForCarrier(carrierId);
+  switch (f.body.error) {
+    case "not_found":
+      return { msg: `No shipment found with that number at ${name}.`, retry: false };
+    case "invalid_input":
+      return { msg: f.body.message ?? `That doesn't look like a valid ${name} tracking number.`, retry: false };
+    case "rate_limited":
+      return { msg: `${name} is rate-limiting lookups right now. Try again in a minute.`, retry: true };
+    case "upstream_error":
+      return { msg: `Couldn't reach ${name} just now. Try again shortly.`, retry: true };
+    case "network":
+      return { msg: "Network error. Check your connection and try again.", retry: true };
+    default:
+      return { msg: f.body.message ?? f.body.error ?? "Something went wrong. Try again.", retry: true };
+  }
+}
+
+type UiError = { msg: string; retry: boolean };
 
 export default function Home() {
-  const [carrier, setCarrier] = useState("bluedart");
+  const [carrier, setCarrier] = useState<string>(AUTO_CARRIER);
   const [tracking, setTracking] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TrackingResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Carrier the shown result actually came from (differs from `carrier` in auto mode).
+  const [resolvedCarrier, setResolvedCarrier] = useState<string | null>(null);
+  const [error, setError] = useState<UiError | null>(null);
   // When a track comes back not_found, remember the (carrier, tracking) the
   // user typed so we can offer to pre-watch it before the carrier ingests it.
   const [notFound, setNotFound] = useState<{ carrier: string; tracking: string } | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const cleaned = tracking.trim();
+  const runLookup = useCallback(async (carrierSel: string, raw: string) => {
+    const cleaned = raw.trim();
     if (!cleaned) return;
     setLoading(true);
     setError(null);
     setResult(null);
+    setResolvedCarrier(null);
     setNotFound(null);
+
+    const targets = carrierSel === AUTO_CARRIER ? detectCarriers(cleaned) : [carrierSel];
+    if (targets.length === 0) {
+      setError({
+        msg: "That doesn't look like a tracking number we recognise. Pick the carrier from the list and try again.",
+        retry: false,
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
-      const res = await fetch(`/api/track/${encodeURIComponent(carrier)}/${encodeURIComponent(cleaned)}`);
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.message ?? body.error ?? "Request failed");
-        // A not_found AWB is often just one the carrier hasn't scanned yet —
-        // offer to watch it so the user gets alerted once it appears.
-        if (body.error === "not_found") setNotFound({ carrier, tracking: cleaned });
-      } else {
-        setResult(body);
+      const { hit, failures } = await firstSuccess(targets.map((id) => lookupOne(id, cleaned)));
+      if (hit && hit.ok) {
+        setResult(hit.result);
+        setResolvedCarrier(hit.carrier);
+        // Make the lookup addressable: refresh/back/share keeps the result.
+        const q = new URLSearchParams({ carrier: hit.carrier, tracking: cleaned });
+        window.history.replaceState(null, "", `/?${q}`);
+        return;
       }
+
+      if (carrierSel !== AUTO_CARRIER) {
+        const f = failures[0];
+        if (f && !f.ok) {
+          setError(describeFailure(f, carrierSel));
+          // A not_found AWB is often just one the carrier hasn't scanned yet —
+          // offer to watch it so the user gets alerted once it appears.
+          if (f.body.error === "not_found") setNotFound({ carrier: carrierSel, tracking: cleaned });
+        }
+        return;
+      }
+
+      // Auto mode and nothing resolved. If every candidate said "not found",
+      // say which ones we asked; otherwise surface the most useful failure.
+      const notFoundAll = failures.every((f) => !f.ok && f.body.error === "not_found");
+      if (notFoundAll) {
+        setError({
+          msg: `No shipment found with that number at ${listLabels(targets)}. If it was booked in the last day, pick the carrier and we can watch it for you.`,
+          retry: false,
+        });
+        return;
+      }
+      const worst =
+        failures.find((f) => !f.ok && (f.body.error === "rate_limited" || f.body.error === "upstream_error" || f.body.error === "network")) ??
+        failures[0];
+      if (worst && !worst.ok) setError(describeFailure(worst, worst.carrier || targets[0]));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Network error");
+      setError({ msg: err instanceof Error ? err.message : "Network error", retry: true });
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  // Restore state on load: ?carrier=&tracking= deep links win, else the last
+  // carrier this browser used. Done async so no setState runs synchronously
+  // inside the effect body.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      const params = new URLSearchParams(window.location.search);
+      const qCarrier = params.get("carrier") ?? "";
+      const qTracking = (params.get("tracking") ?? "").trim();
+      let stored: string | null = null;
+      try {
+        stored = window.localStorage.getItem(LAST_CARRIER_KEY);
+      } catch {
+        /* storage unavailable */
+      }
+      const initial = isKnownCarrier(qCarrier) ? qCarrier : stored && isKnownCarrier(stored) ? stored : AUTO_CARRIER;
+      setCarrier(initial);
+      if (qTracking) {
+        setTracking(qTracking);
+        void runLookup(initial, qTracking);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [runLookup]);
+
+  function chooseCarrier(id: string) {
+    setCarrier(id);
+    try {
+      window.localStorage.setItem(LAST_CARRIER_KEY, id);
+    } catch {
+      /* storage unavailable */
+    }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    void runLookup(carrier, tracking);
   }
 
   return (
@@ -143,9 +292,11 @@ export default function Home() {
       >
         <select
           value={carrier}
-          onChange={(e) => setCarrier(e.target.value)}
+          onChange={(e) => chooseCarrier(e.target.value)}
+          aria-label="Carrier"
           style={{ ...inputStyle, border: "none", background: "transparent", fontWeight: 500 }}
         >
+          <option value={AUTO_CARRIER}>Auto-detect carrier</option>
           <option value="bluedart">Blue Dart</option>
           <option value="shiprocket">Shiprocket</option>
           <option value="delhivery">Delhivery</option>
@@ -157,6 +308,8 @@ export default function Home() {
           value={tracking}
           onChange={(e) => setTracking(e.target.value)}
           placeholder="Enter tracking / AWB number"
+          aria-label="Tracking number"
+          autoComplete="off"
           style={{ ...inputStyle, flex: 1, minWidth: 220, border: "none", background: "transparent", fontSize: 15 }}
         />
         <button type="submit" disabled={loading || !tracking.trim()} style={buttonStyle}>
@@ -186,13 +339,16 @@ export default function Home() {
             has no credential-free tracking page — its API only returns shipments booked under
             our own Delhivery account. So this works for the operator&apos;s parcels, but a random
             Delhivery AWB will show &ldquo;not found.&rdquo; For most e-commerce Delhivery
-            parcels, try <button type="button" onClick={() => setCarrier("shiprocket")} style={linkBtnStyle}>Shiprocket</button> instead.
+            parcels, try <button type="button" onClick={() => chooseCarrier("shiprocket")} style={linkBtnStyle}>Shiprocket</button> instead.
           </span>
         </div>
       )}
 
+      {loading && <ResultSkeleton />}
+
       {error && (
         <div
+          role="alert"
           style={{
             ...cardStyle,
             borderColor: "var(--danger-border)",
@@ -201,10 +357,20 @@ export default function Home() {
             display: "flex",
             alignItems: "center",
             gap: 10,
+            flexWrap: "wrap",
           }}
         >
           <span aria-hidden style={{ fontSize: 16 }}>⚠</span>
-          <span style={{ fontSize: 14, fontWeight: 500 }}>{error}</span>
+          <span style={{ fontSize: 14, fontWeight: 500, flex: 1, minWidth: 200 }}>{error.msg}</span>
+          {error.retry && (
+            <button
+              type="button"
+              onClick={() => void runLookup(carrier, tracking)}
+              style={{ ...buttonGhostStyle, padding: "7px 14px", fontSize: 13 }}
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 
@@ -245,13 +411,17 @@ export default function Home() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <div>
                   <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 500, marginBottom: 4 }}>
-                    {result.carrier.toUpperCase()} · WAYBILL
+                    {labelForCarrier(result.carrier).toUpperCase()} · WAYBILL
+                    {carrier === AUTO_CARRIER && <span style={{ fontWeight: 400 }}> · auto-detected</span>}
                   </div>
-                  <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 18, fontWeight: 600 }}>
-                    {result.trackingNumber}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 18, fontWeight: 600 }}>
+                      {result.trackingNumber}
+                    </span>
+                    <CopyButton value={result.trackingNumber} />
                   </div>
                 </div>
-                <span style={statusPillStyle(result.status)}>{result.status.replace(/_/g, " ")}</span>
+                <span style={statusPillStyle(result.status)}>{humanStatus(result.status)}</span>
               </div>
               {result.origin && result.destination && (
                 <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, fontSize: 14, color: "var(--fg-soft)" }}>
@@ -269,7 +439,7 @@ export default function Home() {
                 <ShareButton
                   url={`${typeof window !== "undefined" ? window.location.origin : ""}/track/${encodeURIComponent(result.carrier)}/${encodeURIComponent(result.trackingNumber)}`}
                   title={`Track ${result.trackingNumber}`}
-                  text={`Tracking ${result.carrier} shipment ${result.trackingNumber} — ${result.status.replace(/_/g, " ")}`}
+                  text={`Tracking ${labelForCarrier(result.carrier)} shipment ${result.trackingNumber} — ${humanStatus(result.status)}`}
                 />
               </div>
             </div>
@@ -279,7 +449,7 @@ export default function Home() {
             </div>
           </div>
 
-          <NotifyForm carrier={carrier} trackingNumber={result.trackingNumber} />
+          <NotifyForm carrier={resolvedCarrier ?? result.carrier} trackingNumber={result.trackingNumber} />
         </>
       )}
 
