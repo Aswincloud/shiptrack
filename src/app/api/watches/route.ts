@@ -5,8 +5,14 @@ import {
   cancelWatch,
   createWatch,
   confirmWatch,
+  countGuestWatchesForEmailSince,
+  countGuestWatchesSince,
   countOpenWatchesForUser,
+  findOpenGuestWatch,
   getUserById,
+  DEFAULT_POLL_INTERVAL_SECONDS,
+  MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY,
+  MAX_GUEST_WATCHES_PER_HOUR,
   MAX_OPEN_WATCHES_PER_USER,
   MIN_POLL_INTERVAL_SECONDS,
   MAX_POLL_INTERVAL_SECONDS,
@@ -40,8 +46,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }
 
-  // Auth: prefer session cookie. Fall back to ADMIN_TOKEN bearer for legacy /
-  // owner curl flow. One of the two must succeed.
+  // Auth: prefer session cookie, then the ADMIN_TOKEN bearer (legacy / owner
+  // curl flow). A request carrying neither is a signed-out visitor asking us to
+  // watch a shipment from a track page — allowed, but only ever as a
+  // double-opt-in request: `guest` forces confirmation and rate limits below.
   //
   // `selfEmail` is the requester's own verified address, and stays null for the
   // ADMIN_TOKEN path — that token is the operator's own credential, so their
@@ -49,6 +57,7 @@ export async function POST(req: NextRequest) {
   const session = await readSession(env.TOKEN_SECRET, req);
   let userId: string | null = null;
   let selfEmail: string | null = null;
+  let guest = false;
   if (session) {
     const user = await getUserById(env.DB, session.userId);
     if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -57,8 +66,15 @@ export async function POST(req: NextRequest) {
   } else {
     const auth = req.headers.get("authorization") ?? "";
     const provided = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    if (!env.ADMIN_TOKEN || !provided || provided !== env.ADMIN_TOKEN) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (provided) {
+      // A bearer token was offered: it either matches or the request is
+      // rejected. Falling through to the guest path would turn a typo'd
+      // operator token into a silently downgraded request.
+      if (!env.ADMIN_TOKEN || provided !== env.ADMIN_TOKEN) {
+        return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      }
+    } else {
+      guest = true;
     }
   }
 
@@ -91,11 +107,50 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (guest) {
+    // Repeat request for the same shipment: the link we already sent is still
+    // good, so say so rather than mailing the address again.
+    const existing = await findOpenGuestWatch(env.DB, cleanedEmail, cleanedCarrier, cleanedTracking);
+    if (existing) {
+      return NextResponse.json(
+        {
+          status: existing.status === "active" ? "active" : "pending_confirmation",
+          id: existing.id,
+          duplicate: true,
+        },
+        { status: 200 },
+      );
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const perEmail = await countGuestWatchesForEmailSince(env.DB, cleanedEmail, now - 24 * 60 * 60);
+    if (perEmail >= MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY) {
+      return NextResponse.json(
+        {
+          error: "rate_limited",
+          message: `That address has already requested ${MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY} shipment alerts today. Create an account to watch more.`,
+        },
+        { status: 429 },
+      );
+    }
+    const siteWide = await countGuestWatchesSince(env.DB, now - 60 * 60);
+    if (siteWide >= MAX_GUEST_WATCHES_PER_HOUR) {
+      return NextResponse.json(
+        {
+          error: "rate_limited",
+          message: "We're handling a lot of alert requests right now. Try again in a little while.",
+        },
+        { status: 429 },
+      );
+    }
+  }
+
   // A watch may only mail an address that has agreed to hear from us. Your own
   // account address is self-evidently consented; anyone else's has to click a
   // confirmation link before the poller will alert it — otherwise an account
-  // could point watches at strangers and use ShipTrack to mail them.
-  const needsConfirmation = selfEmail !== null && cleanedEmail !== selfEmail;
+  // could point watches at strangers and use ShipTrack to mail them. A
+  // signed-out visitor has proved nothing, so their request always confirms.
+  const needsConfirmation = guest || (selfEmail !== null && cleanedEmail !== selfEmail);
 
   const mailConfigured = !!(env.RESEND_API_KEY && env.RESEND_FROM);
   if (needsConfirmation && !mailConfigured) {
@@ -111,7 +166,9 @@ export async function POST(req: NextRequest) {
     carrier: cleanedCarrier,
     trackingNumber: cleanedTracking,
     label: cleanedLabel,
-    pollIntervalSeconds: parsed.data.pollIntervalSeconds,
+    // Guests don't get to pick a cadence: an unowned watch nobody can see on a
+    // dashboard shouldn't be able to claim the poller's tightest interval.
+    pollIntervalSeconds: guest ? DEFAULT_POLL_INTERVAL_SECONDS : parsed.data.pollIntervalSeconds,
   });
   if (!needsConfirmation) await confirmWatch(env.DB, id);
 

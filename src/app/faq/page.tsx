@@ -44,13 +44,17 @@ const QA: { q: string; a: React.ReactNode; aText: string }[] = [
     q: "Can I get notifications without creating an account?",
     a: (
       <>
-        You can <em>view</em> a tracking status without signing up. To save a
-        watch and get email alerts, an account is needed so we can attach the
-        watch to a verified email address.
+        Yes, for a single shipment. If a tracking link comes back with nothing
+        found — usually a parcel the carrier hasn&rsquo;t scanned yet — you can
+        leave your email on that page and we&rsquo;ll watch the number for you.
+        We send a confirmation link first, and alerts only start once you click
+        it, so nobody can sign up an address they don&rsquo;t own. An account is
+        still worth having to keep several watches in one place, change how
+        often each is checked, and see their history.
       </>
     ),
     aText:
-      "You can view a tracking status without signing up. To save a watch and get email alerts, an account is needed so we can attach the watch to a verified email address.",
+      "Yes, for a single shipment. If a tracking link comes back with nothing found, you can leave your email on that page and we'll watch the number for you. We send a confirmation link first and alerts only start once you click it. An account is still worth having to keep several watches in one place, change how often each is checked, and see their history.",
   },
   {
     q: "Is my password safe?",

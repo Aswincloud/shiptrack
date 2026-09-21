@@ -9,6 +9,7 @@ import { Timeline } from "@/app/components/Timeline";
 import { ResultMeta } from "@/app/components/ResultMeta";
 import { ShareButton } from "@/app/components/ShareButton";
 import { CopyButton } from "@/app/components/CopyButton";
+import { WatchRequestForm } from "@/app/components/WatchRequestForm";
 import { cardStyle, statusPillStyle, buttonStyle } from "@/app/styles";
 
 export const dynamic = "force-dynamic";
@@ -106,6 +107,15 @@ export default async function PublicTrackPage({ params }: { params: Promise<Para
         <div style={{ ...cardStyle, borderColor: "var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger)", display: "flex", gap: 10, alignItems: "center" }}>
           <span aria-hidden style={{ fontSize: 16 }}>⚠</span>
           <span style={{ fontSize: 14, fontWeight: 500 }}>{errorMsg}</span>
+        </div>
+      )}
+
+      {/* A number the carrier doesn't know is usually one it hasn't ingested
+          yet, so offer to watch it rather than leaving the visitor at a dead
+          end. No account needed — the API confirms the address by email. */}
+      {error === "not_found" && (
+        <div style={{ ...cardStyle, marginTop: 16 }}>
+          <WatchRequestForm carrier={carrierId} carrierName={carrier.name} trackingNumber={tracking} />
         </div>
       )}
 

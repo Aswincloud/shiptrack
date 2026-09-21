@@ -4,22 +4,25 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { buttonGhostStyle, cardStyle } from "../styles";
-import type { ClientWatch, AdminUser } from "./components/types";
+import type { ClientWatch, AdminUser, AdminWatchRequest } from "./components/types";
 import { AddWatchModal } from "./components/AddWatchModal";
 import { HistoryModal } from "./components/HistoryModal";
 import { WatchTable } from "./components/WatchTable";
 import { AdminSection } from "./components/AdminSection";
+import { AdminWatchRequests } from "./components/AdminWatchRequests";
 
 export function DashboardClient({
   email,
   initialWatches,
   isAdmin,
   adminUsers,
+  adminWatchRequests,
 }: {
   email: string;
   initialWatches: ClientWatch[];
   isAdmin: boolean;
   adminUsers: AdminUser[] | null;
+  adminWatchRequests: AdminWatchRequest[] | null;
 }) {
   const router = useRouter();
   const [watches, setWatches] = useState<ClientWatch[]>(initialWatches);
@@ -158,9 +161,10 @@ export function DashboardClient({
         </section>
       )}
 
-      {isAdmin && adminUsers && (
+      {isAdmin && (
         <section>
-          <AdminSection initialUsers={adminUsers} currentUserId={undefined} />
+          {adminWatchRequests && <AdminWatchRequests initialRequests={adminWatchRequests} />}
+          {adminUsers && <AdminSection initialUsers={adminUsers} currentUserId={undefined} />}
         </section>
       )}
 
