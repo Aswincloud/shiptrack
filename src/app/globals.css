@@ -44,6 +44,14 @@
   --hero-text-gradient: linear-gradient(135deg, #0f172a 0%, #6366f1 100%);
   --overlay: rgba(15, 23, 42, 0.45);      /* modal backdrop */
   --selection: rgba(99, 102, 241, 0.2);
+  /* Password-strength ramp (components/PasswordStrength.tsx), weakest first.
+     Tokenised because the light ramp's saturated reds and greens fall under
+     4.5:1 on the dark card. */
+  --strength-0: #e11d48;
+  --strength-1: #f97316;
+  --strength-2: #f59e0b;
+  --strength-3: #16a34a;
+  --strength-4: #059669;
   color-scheme: light;
 }
 
@@ -96,6 +104,11 @@
     --hero-text-gradient: linear-gradient(135deg, #f1f5f9 0%, #a5b4fc 100%);
     --overlay: rgba(2, 6, 23, 0.7);
     --selection: rgba(129, 140, 248, 0.3);
+    --strength-0: #fb7185;
+    --strength-1: #fb923c;
+    --strength-2: #fbbf24;
+    --strength-3: #4ade80;
+    --strength-4: #34d399;
     color-scheme: dark;
   }
 }
@@ -144,6 +157,11 @@
   --hero-text-gradient: linear-gradient(135deg, #f1f5f9 0%, #a5b4fc 100%);
   --overlay: rgba(2, 6, 23, 0.7);
   --selection: rgba(129, 140, 248, 0.3);
+  --strength-0: #fb7185;
+  --strength-1: #fb923c;
+  --strength-2: #fbbf24;
+  --strength-3: #4ade80;
+  --strength-4: #34d399;
   color-scheme: dark;
 }
 
