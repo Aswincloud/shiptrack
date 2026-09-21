@@ -6,6 +6,7 @@ import { CarrierError, type TrackingResult } from "@/carriers/types";
 import { getEnvAsync } from "@/lib/env";
 import { humanStatus } from "@/lib/status";
 import { Timeline } from "@/app/components/Timeline";
+import { ResultMeta } from "@/app/components/ResultMeta";
 import { ShareButton } from "@/app/components/ShareButton";
 import { CopyButton } from "@/app/components/CopyButton";
 import { cardStyle, statusPillStyle, buttonStyle } from "@/app/styles";
@@ -132,11 +133,7 @@ export default async function PublicTrackPage({ params }: { params: Promise<Para
                 <span style={{ fontWeight: 500 }}>{result.destination}</span>
               </div>
             )}
-            {result.estimatedDelivery && (
-              <div style={{ marginTop: 10, fontSize: 13, color: "var(--muted)" }}>
-                Expected delivery: <strong style={{ color: "var(--fg)" }}>{result.estimatedDelivery}</strong>
-              </div>
-            )}
+            <ResultMeta events={result.events} estimatedDelivery={result.estimatedDelivery} />
             <div style={{ marginTop: 16 }}>
               <ShareButton
                 title={`Track ${result.trackingNumber}`}

@@ -7,6 +7,7 @@ import { AUTO_CARRIER, detectCarriers } from "@/carriers/detect";
 import { humanStatus } from "@/lib/status";
 import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, statusPillStyle } from "./styles";
 import { Timeline } from "./components/Timeline";
+import { ResultMeta } from "./components/ResultMeta";
 import { ShareButton } from "./components/ShareButton";
 import { CopyButton } from "./components/CopyButton";
 import { ResultSkeleton } from "./components/ResultSkeleton";
@@ -430,11 +431,7 @@ export default function Home() {
                   <span style={{ fontWeight: 500 }}>{result.destination}</span>
                 </div>
               )}
-              {result.estimatedDelivery && (
-                <div style={{ marginTop: 10, fontSize: 13, color: "var(--muted)" }}>
-                  Expected delivery: <strong style={{ color: "var(--fg)" }}>{result.estimatedDelivery}</strong>
-                </div>
-              )}
+              <ResultMeta events={result.events} estimatedDelivery={result.estimatedDelivery} />
               <div style={{ marginTop: 16 }}>
                 <ShareButton
                   url={`${typeof window !== "undefined" ? window.location.origin : ""}/track/${encodeURIComponent(result.carrier)}/${encodeURIComponent(result.trackingNumber)}`}
