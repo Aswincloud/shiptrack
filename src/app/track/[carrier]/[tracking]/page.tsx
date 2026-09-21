@@ -4,8 +4,10 @@ import Link from "next/link";
 import { getCarrier } from "@/carriers/registry";
 import { CarrierError, type TrackingResult } from "@/carriers/types";
 import { getEnvAsync } from "@/lib/env";
+import { humanStatus } from "@/lib/status";
 import { Timeline } from "@/app/components/Timeline";
 import { ShareButton } from "@/app/components/ShareButton";
+import { CopyButton } from "@/app/components/CopyButton";
 import { cardStyle, statusPillStyle, buttonStyle } from "@/app/styles";
 
 export const dynamic = "force-dynamic";
@@ -37,10 +39,6 @@ const OG_IMAGE = {
   height: 630,
   alt: "ShipTrack — free courier tracking for India with email alerts",
 };
-
-function humanStatus(s: string): string {
-  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
   const { carrier: carrierId, tracking } = await params;
@@ -118,11 +116,14 @@ export default async function PublicTrackPage({ params }: { params: Promise<Para
                 <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 500, marginBottom: 4 }}>
                   {result.carrier.toUpperCase()} · WAYBILL
                 </div>
-                <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 18, fontWeight: 600 }}>
-                  {result.trackingNumber}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 18, fontWeight: 600 }}>
+                    {result.trackingNumber}
+                  </span>
+                  <CopyButton value={result.trackingNumber} />
                 </div>
               </div>
-              <span style={statusPillStyle(result.status)}>{result.status.replace(/_/g, " ")}</span>
+              <span style={statusPillStyle(result.status)}>{humanStatus(result.status)}</span>
             </div>
             {result.origin && result.destination && (
               <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 12, fontSize: 14, color: "var(--fg-soft)" }}>
@@ -139,7 +140,7 @@ export default async function PublicTrackPage({ params }: { params: Promise<Para
             <div style={{ marginTop: 16 }}>
               <ShareButton
                 title={`Track ${result.trackingNumber}`}
-                text={`Tracking ${result.carrier} shipment ${result.trackingNumber} — ${result.status.replace(/_/g, " ")}`}
+                text={`Tracking ${carrier.name} shipment ${result.trackingNumber} — ${humanStatus(result.status)}`}
               />
             </div>
           </div>
