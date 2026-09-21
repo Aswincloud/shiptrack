@@ -103,8 +103,9 @@ export function PasswordStrength({ password }: { password: string }) {
   if (!password) return null;
   const { score, label, reason } = estimateStrength(password);
 
-  const colors = ["#e11d48", "#f97316", "#f59e0b", "#16a34a", "#059669"];
-  const color = colors[score];
+  // Ramp lives in globals.css so each theme can carry its own: the light
+  // ramp's rose and greens sit under 4.5:1 on the dark card.
+  const color = `var(--strength-${score})`;
 
   return (
     <div style={{ marginTop: 6 }}>

@@ -51,7 +51,10 @@ export function DashboardClient({
           ...cardStyle,
           padding: "24px 28px",
           marginBottom: 24,
-          background: "linear-gradient(135deg, #ffffff 0%, var(--accent-soft) 100%)",
+          // --card, not a literal white: in dark mode a white gradient stop
+          // leaves --fg text unreadable on its own card. Identical in light,
+          // where --card is #ffffff.
+          background: "linear-gradient(135deg, var(--card) 0%, var(--accent-soft) 100%)",
           borderColor: "var(--accent-soft)",
           display: "flex",
           justifyContent: "space-between",

@@ -94,6 +94,22 @@ export const POLL_TICK_GRACE_SECONDS = 60;
 // day (96 * 15 min = 24 h) instead of hammering the carrier every tick.
 export const MAX_POLL_BACKOFF_MULTIPLIER = 96;
 
+// Exception to that backoff, for the case it fits worst: a watch registered
+// *because* the carrier didn't know the number yet. Every poll fails until the
+// shipment is ingested, so the plain doubling would be at 8h by the time it
+// has been failing half a day and at the 24h cap after ~32h — turning "we'll
+// tell you when it appears" into "some time the next day". While such a watch
+// has never produced a scan and is younger than UNSCANNED_FAST_WINDOW_SECONDS,
+// its effective interval is therefore capped at UNSCANNED_MAX_INTERVAL_SECONDS
+// (or its own interval, if the owner picked something slower).
+//
+// The window is what keeps this honest: a number still missing after two days
+// is far more likely mistyped than early, so past that the normal exponential
+// cap takes over and the watch settles at one fetch a day until
+// DEAD_WATCH_SECONDS retires it.
+export const UNSCANNED_FAST_WINDOW_SECONDS = 48 * 60 * 60;
+export const UNSCANNED_MAX_INTERVAL_SECONDS = 60 * 60;
+
 // A watch that has never produced a single scan after this long is treated as
 // dead (mistyped AWB, shipment never booked) and stops being polled.
 export const DEAD_WATCH_SECONDS = 30 * 24 * 60 * 60;
@@ -334,16 +350,38 @@ export async function listDueWatches(
   // capped at MAX_POLL_BACKOFF_MULTIPLIER. SQLite has no POWER(), but it does
   // have a bit-shift, and 1 << 7 already exceeds the cap, so the inner MIN
   // keeps the shift bounded and the outer MIN applies the cap.
+  //
+  // A watch that has never scanned and is still inside its fast window is the
+  // exception (see UNSCANNED_FAST_WINDOW_SECONDS): the backed-off interval is
+  // clamped to UNSCANNED_MAX_INTERVAL_SECONDS, or to the watch's own interval
+  // when the owner asked for something slower than that. Two-argument MIN/MAX
+  // are SQLite's scalar forms, not the aggregates.
   const res = await db
     .prepare(
       `SELECT * FROM watches
        WHERE status='active'
          AND (last_polled_at IS NULL
-              OR (? - last_polled_at) >= poll_interval_seconds * MIN(1 << MIN(poll_failures, 7), ?) - ?)
+              OR (? - last_polled_at) >=
+                 CASE
+                   WHEN last_known_status IS NULL
+                        AND (? - COALESCE(confirmed_at, created_at)) < ?
+                   THEN MIN(poll_interval_seconds * MIN(1 << MIN(poll_failures, 7), ?),
+                            MAX(poll_interval_seconds, ?))
+                   ELSE poll_interval_seconds * MIN(1 << MIN(poll_failures, 7), ?)
+                 END - ?)
        ORDER BY last_polled_at ASC NULLS FIRST
        LIMIT ?`,
     )
-    .bind(now, MAX_POLL_BACKOFF_MULTIPLIER, POLL_TICK_GRACE_SECONDS, batchSize)
+    .bind(
+      now,
+      now,
+      UNSCANNED_FAST_WINDOW_SECONDS,
+      MAX_POLL_BACKOFF_MULTIPLIER,
+      UNSCANNED_MAX_INTERVAL_SECONDS,
+      MAX_POLL_BACKOFF_MULTIPLIER,
+      POLL_TICK_GRACE_SECONDS,
+      batchSize,
+    )
     .all<WatchRow>();
   return res.results ?? [];
 }
