@@ -32,7 +32,7 @@ export function Timeline({ events }: { events: TrackingEvent[] }) {
               borderRadius: "50%",
               background: i === 0 ? "var(--accent)" : "var(--card)",
               border: `2px solid ${i === 0 ? "var(--accent)" : "var(--border-strong)"}`,
-              boxShadow: i === 0 ? "0 0 0 4px rgba(99,102,241,0.15)" : "none",
+              boxShadow: i === 0 ? "var(--shadow-glow)" : "none",
               zIndex: 1,
             }}
           />

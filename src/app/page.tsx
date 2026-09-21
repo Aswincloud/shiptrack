@@ -263,7 +263,7 @@ export default function Home() {
             fontWeight: 800,
             margin: "0 0 12px",
             letterSpacing: "-0.03em",
-            background: "linear-gradient(135deg, #0f172a 0%, #6366f1 100%)",
+            background: "var(--hero-text-gradient)",
             WebkitBackgroundClip: "text",
             WebkitTextFillColor: "transparent",
             backgroundClip: "text",
@@ -324,8 +324,8 @@ export default function Home() {
             ...cardStyle,
             padding: "12px 16px",
             marginTop: 12,
-            background: "var(--warning-bg, #fffbeb)",
-            borderColor: "var(--warning-border, #fde68a)",
+            background: "var(--warning-bg)",
+            borderColor: "var(--warning-border)",
             display: "flex",
             gap: 10,
             alignItems: "flex-start",
@@ -405,7 +405,7 @@ export default function Home() {
             <div
               style={{
                 padding: "20px 24px",
-                background: "linear-gradient(135deg, var(--accent-soft) 0%, #faf5ff 100%)",
+                background: "linear-gradient(135deg, var(--accent-soft) 0%, var(--accent-wash) 100%)",
                 borderBottom: "1px solid var(--border)",
               }}
             >
@@ -548,7 +548,7 @@ function NotifyForm({
         style={{
           ...outerStyle,
           textAlign: "center",
-          background: embedded ? "transparent" : "linear-gradient(135deg, var(--accent-soft) 0%, #faf5ff 100%)",
+          background: embedded ? "transparent" : "linear-gradient(135deg, var(--accent-soft) 0%, var(--accent-wash) 100%)",
           borderColor: "var(--accent-soft)",
         }}
       >
