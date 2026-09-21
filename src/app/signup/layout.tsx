@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Create your free account",
   description:
-    "Sign up for free to track Blue Dart shipments and get instant email alerts on status changes.",
+    "Sign up for free to track courier shipments across India and get instant email alerts on status changes.",
   alternates: { canonical: "/signup" },
 };
 

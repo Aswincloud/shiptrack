@@ -3,9 +3,9 @@ import Link from "next/link";
 import { PolicyLayout, pStyle } from "../components/PolicyLayout";
 
 export const metadata: Metadata = {
-  title: "Blue Dart tracking FAQ",
+  title: "FAQ",
   description:
-    "How does ShipTrack work? Is it free? How often does it check? Common questions about tracking Blue Dart shipments and getting email alerts.",
+    "How does ShipTrack work? Is it free? How often does it check? Common questions about tracking Indian courier shipments and getting email alerts.",
   alternates: { canonical: "/faq" },
 };
 
