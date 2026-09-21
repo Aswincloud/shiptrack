@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import Script from "next/script";
 import { Inter } from "next/font/google";
@@ -84,6 +84,14 @@ export const metadata: Metadata = {
   },
 };
 
+// Browser chrome (mobile address bar, PWA title bar) follows the page theme.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8fafc" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b1020" },
+  ],
+};
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const env = await getEnvAsync();
   const signedIn = env?.DB && env?.TOKEN_SECRET
@@ -100,7 +108,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             alignItems: "center",
             padding: "16px 24px",
             borderBottom: "1px solid var(--border)",
-            background: "rgba(255, 255, 255, 0.7)",
+            background: "var(--nav-bg)",
             backdropFilter: "blur(12px)",
             WebkitBackdropFilter: "blur(12px)",
             position: "sticky",

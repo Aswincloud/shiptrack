@@ -38,6 +38,113 @@
   --info-border: #bae6fd;
   --neutral-bg: #f1f5f9;
   --neutral-border: #cbd5e1;
+  /* Surfaces that were hardcoded in components before dark mode existed. */
+  --nav-bg: rgba(255, 255, 255, 0.7);
+  --accent-wash: #faf5ff;                 /* soft end of the accent gradients on cards */
+  --hero-text-gradient: linear-gradient(135deg, #0f172a 0%, #6366f1 100%);
+  --overlay: rgba(15, 23, 42, 0.45);      /* modal backdrop */
+  --selection: rgba(99, 102, 241, 0.2);
+  color-scheme: light;
+}
+
+/* Dark theme. Applied when the OS prefers dark and the page hasn't opted into
+   light explicitly, or when data-theme="dark" is set on <html>. Same tokens,
+   so components need no changes. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1020;
+    --bg-gradient:
+      radial-gradient(circle at 12% 18%, rgba(139, 92, 246, 0.28) 0%, transparent 45%),
+      radial-gradient(circle at 88% 12%, rgba(56, 189, 248, 0.22) 0%, transparent 48%),
+      radial-gradient(circle at 78% 82%, rgba(236, 72, 153, 0.18) 0%, transparent 50%),
+      radial-gradient(circle at 22% 88%, rgba(34, 197, 94, 0.14) 0%, transparent 46%),
+      linear-gradient(135deg, #0b1020 0%, #111827 50%, #0f172a 100%);
+    --bg-pattern: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><circle cx='1.5' cy='1.5' r='1.4' fill='%23a5b4fc' fill-opacity='0.22'/></svg>");
+    --fg: #e5e7eb;
+    --fg-soft: #cbd5e1;
+    --muted: #94a3b8;
+    --muted-soft: #64748b;
+    --accent: #818cf8;
+    --accent-hover: #a5b4fc;
+    --accent-soft: rgba(99, 102, 241, 0.18);
+    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    --accent-gradient-hover: linear-gradient(135deg, #7c7ff5 0%, #9d6ff8 100%);
+    --border: #263244;
+    --border-strong: #334155;
+    --card: #111827;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 6px 16px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 14px 32px -6px rgba(0, 0, 0, 0.6), 0 6px 12px -4px rgba(0, 0, 0, 0.45);
+    --shadow-glow: 0 0 0 4px rgba(129, 140, 248, 0.25);
+    --success: #34d399;
+    --success-bg: rgba(16, 185, 129, 0.12);
+    --success-border: rgba(52, 211, 153, 0.35);
+    --danger: #fb7185;
+    --danger-bg: rgba(244, 63, 94, 0.12);
+    --danger-border: rgba(251, 113, 133, 0.35);
+    --warning: #fbbf24;
+    --warning-bg: rgba(245, 158, 11, 0.12);
+    --warning-border: rgba(251, 191, 36, 0.35);
+    --info: #38bdf8;
+    --info-bg: rgba(14, 165, 233, 0.12);
+    --info-border: rgba(56, 189, 248, 0.35);
+    --neutral-bg: #1e293b;
+    --neutral-border: #334155;
+    --nav-bg: rgba(11, 16, 32, 0.7);
+    --accent-wash: rgba(139, 92, 246, 0.10);
+    --hero-text-gradient: linear-gradient(135deg, #f1f5f9 0%, #a5b4fc 100%);
+    --overlay: rgba(2, 6, 23, 0.7);
+    --selection: rgba(129, 140, 248, 0.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1020;
+  --bg-gradient:
+    radial-gradient(circle at 12% 18%, rgba(139, 92, 246, 0.28) 0%, transparent 45%),
+    radial-gradient(circle at 88% 12%, rgba(56, 189, 248, 0.22) 0%, transparent 48%),
+    radial-gradient(circle at 78% 82%, rgba(236, 72, 153, 0.18) 0%, transparent 50%),
+    radial-gradient(circle at 22% 88%, rgba(34, 197, 94, 0.14) 0%, transparent 46%),
+    linear-gradient(135deg, #0b1020 0%, #111827 50%, #0f172a 100%);
+  --bg-pattern: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><circle cx='1.5' cy='1.5' r='1.4' fill='%23a5b4fc' fill-opacity='0.22'/></svg>");
+  --fg: #e5e7eb;
+  --fg-soft: #cbd5e1;
+  --muted: #94a3b8;
+  --muted-soft: #64748b;
+  --accent: #818cf8;
+  --accent-hover: #a5b4fc;
+  --accent-soft: rgba(99, 102, 241, 0.18);
+  --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  --accent-gradient-hover: linear-gradient(135deg, #7c7ff5 0%, #9d6ff8 100%);
+  --border: #263244;
+  --border-strong: #334155;
+  --card: #111827;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 6px 16px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 14px 32px -6px rgba(0, 0, 0, 0.6), 0 6px 12px -4px rgba(0, 0, 0, 0.45);
+  --shadow-glow: 0 0 0 4px rgba(129, 140, 248, 0.25);
+  --success: #34d399;
+  --success-bg: rgba(16, 185, 129, 0.12);
+  --success-border: rgba(52, 211, 153, 0.35);
+  --danger: #fb7185;
+  --danger-bg: rgba(244, 63, 94, 0.12);
+  --danger-border: rgba(251, 113, 133, 0.35);
+  --warning: #fbbf24;
+  --warning-bg: rgba(245, 158, 11, 0.12);
+  --warning-border: rgba(251, 191, 36, 0.35);
+  --info: #38bdf8;
+  --info-bg: rgba(14, 165, 233, 0.12);
+  --info-border: rgba(56, 189, 248, 0.35);
+  --neutral-bg: #1e293b;
+  --neutral-border: #334155;
+  --nav-bg: rgba(11, 16, 32, 0.7);
+  --accent-wash: rgba(139, 92, 246, 0.10);
+  --hero-text-gradient: linear-gradient(135deg, #f1f5f9 0%, #a5b4fc 100%);
+  --overlay: rgba(2, 6, 23, 0.7);
+  --selection: rgba(129, 140, 248, 0.3);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -121,7 +228,7 @@ h1, h2, h3 {
 }
 
 ::selection {
-  background: rgba(99, 102, 241, 0.2);
+  background: var(--selection);
 }
 
 /* Subtle scrollbar */
