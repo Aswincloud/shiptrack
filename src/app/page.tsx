@@ -71,7 +71,7 @@ export default function Home() {
                 name: "ShipTrack",
                 url: "https://shiptrack.aswincloud.com",
                 description:
-                  "Free, open-source shipment tracking for Blue Dart with optional email alerts on status changes.",
+                  "Free, open-source shipment tracking for Blue Dart, Delhivery, Amazon Shipping, ST Courier, TPC and Shiprocket with optional email alerts on status changes.",
                 applicationCategory: "BusinessApplication",
                 operatingSystem: "Any",
                 offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
@@ -123,8 +123,9 @@ export default function Home() {
           Track shipments,<br />get instant alerts
         </h1>
         <p style={{ color: "var(--muted)", margin: 0, fontSize: 16, maxWidth: 480, marginInline: "auto" }}>
-          Paste a Blue Dart waybill to see live status, then opt in to email
-          notifications when it changes.
+          Paste a tracking or AWB number from Blue Dart, Delhivery, Amazon
+          Shipping, ST Courier, TPC or Shiprocket to see live status, then opt
+          in to email alerts when it changes.
         </p>
       </header>
 

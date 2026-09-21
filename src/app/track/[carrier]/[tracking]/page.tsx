@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import Link from "next/link";
 import { getCarrier } from "@/carriers/registry";
-import { CarrierError } from "@/carriers/types";
+import { CarrierError, type TrackingResult } from "@/carriers/types";
 import { getEnvAsync } from "@/lib/env";
 import { Timeline } from "@/app/components/Timeline";
 import { ShareButton } from "@/app/components/ShareButton";
@@ -14,14 +15,64 @@ interface Params {
   tracking: string;
 }
 
+// One carrier lookup per request, shared between generateMetadata and the page
+// body. React's cache() is request-scoped in the App Router, so the share
+// preview can carry the live status without hitting the carrier twice.
+const lookup = cache(
+  async (carrierId: string, tracking: string): Promise<{ result: TrackingResult | null; error: string | null }> => {
+    const carrier = getCarrier(carrierId);
+    if (!carrier) return { result: null, error: "unknown_carrier" };
+    const env = await getEnvAsync();
+    try {
+      return { result: await carrier.track(tracking, { delhiveryToken: env?.DELHIVERY_API_TOKEN }), error: null };
+    } catch (err) {
+      return { result: null, error: err instanceof CarrierError ? err.code : "error" };
+    }
+  },
+);
+
+const OG_IMAGE = {
+  url: "/opengraph-image.png",
+  width: 1200,
+  height: 630,
+  alt: "ShipTrack — free courier tracking for India with email alerts",
+};
+
+function humanStatus(s: string): string {
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
-  const { carrier, tracking } = await params;
-  const title = `Track ${tracking} (${carrier})`;
+  const { carrier: carrierId, tracking } = await params;
+  const carrierName = getCarrier(carrierId)?.name ?? carrierId;
+  const { result } = await lookup(carrierId, tracking);
+  const path = `/track/${carrierId}/${tracking}`;
+
+  const status = result ? humanStatus(result.status) : null;
+  const title = status ? `${tracking} · ${status}` : `Track ${tracking} (${carrierName})`;
+
+  let description = `Live tracking status and scan history for ${carrierName} shipment ${tracking}.`;
+  if (result) {
+    const latest = result.events[result.events.length - 1];
+    const parts = [`${carrierName} · ${status}`];
+    if (latest) {
+      parts.push(
+        [latest.description, latest.location, latest.timestamp].filter(Boolean).join(" · "),
+      );
+    }
+    if (result.estimatedDelivery) parts.push(`Expected delivery ${result.estimatedDelivery}`);
+    description = parts.join(". ") + ".";
+  }
+
   return {
     title,
-    description: `Live tracking status and scan history for ${carrier} shipment ${tracking}.`,
-    alternates: { canonical: `/track/${carrier}/${tracking}` },
+    description,
+    alternates: { canonical: path },
     robots: { index: false, follow: true },
+    // Setting openGraph here replaces the root object wholesale, so the
+    // file-convention image has to be re-attached explicitly.
+    openGraph: { type: "website", url: path, siteName: "ShipTrack", title, description, images: [OG_IMAGE] },
+    twitter: { card: "summary_large_image", title, description, images: [OG_IMAGE.url] },
   };
 }
 
@@ -43,17 +94,12 @@ export default async function PublicTrackPage({ params }: { params: Promise<Para
     );
   }
 
-  const env = await getEnvAsync();
-  let result = null;
-  let errorMsg: string | null = null;
-  try {
-    result = await carrier.track(tracking, { delhiveryToken: env?.DELHIVERY_API_TOKEN });
-  } catch (err) {
-    errorMsg =
-      err instanceof CarrierError && err.code === "not_found"
-        ? "No tracking information found for this shipment."
-        : "Couldn't load tracking right now. Try again shortly.";
-  }
+  const { result, error } = await lookup(carrierId, tracking);
+  const errorMsg: string | null = !error
+    ? null
+    : error === "not_found"
+      ? "No tracking information found for this shipment."
+      : "Couldn't load tracking right now. Try again shortly.";
 
   return (
     <Shell>

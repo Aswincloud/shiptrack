@@ -38,7 +38,7 @@ export default function PrivacyPage() {
       <p style={pStyle}>
         Data is stored in Cloudflare D1 (managed SQLite) in the Asia-Pacific
         region. Emails are sent through Resend. Tracking lookups are made
-        directly to Blue Dart&apos;s public tracking page.
+        directly to each carrier&apos;s public tracking page or API.
       </p>
 
       <h2 style={h2Style}>Who can see it</h2>

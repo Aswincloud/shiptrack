@@ -19,26 +19,30 @@ const inter = Inter({
 
 const SITE_URL = "https://shiptrack.aswincloud.com";
 const SITE_NAME = "ShipTrack";
+const TITLE = "ShipTrack — Free courier tracking for India with email alerts";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "ShipTrack — Free Blue Dart tracking with email alerts",
+    default: "ShipTrack — Free courier tracking for India with email alerts",
     template: "%s · ShipTrack",
   },
   description:
-    "Track Blue Dart shipments for free. Paste an AWB / waybill number to see live status and scan history, or sign up to get instant email alerts when your courier moves. Open source, no ads, no signup required to track.",
+    "Track Blue Dart, Delhivery, Amazon Shipping, ST Courier, TPC and Shiprocket shipments for free. Paste a tracking or AWB number to see live status and scan history, or sign up for instant email alerts when your parcel moves. Open source, no ads, no signup required to track.",
   keywords: [
+    "courier tracking India",
+    "AWB tracking India",
+    "track parcel India",
+    "shipment tracking",
     "Blue Dart tracking",
     "Bluedart tracking",
-    "Blue Dart waybill",
-    "AWB tracking India",
-    "courier tracking India",
-    "shipment tracking",
-    "Blue Dart courier status",
-    "track parcel India",
-    "free Bluedart tracker",
-    "Blue Dart email alerts",
+    "Delhivery tracking",
+    "Amazon Shipping tracking",
+    "ST Courier tracking",
+    "Professional Couriers tracking",
+    "TPC tracking",
+    "Shiprocket tracking",
+    "courier email alerts",
     "open source courier tracker",
     "ShipTrack",
   ],
@@ -54,25 +58,18 @@ export const metadata: Metadata = {
     type: "website",
     url: SITE_URL,
     siteName: SITE_NAME,
-    title: "ShipTrack — Free Blue Dart tracking with email alerts",
+    title: TITLE,
     description:
-      "Track Blue Dart shipments for free. Live status, full scan history, optional email alerts. Open source.",
+      "Track Blue Dart, Delhivery, Amazon Shipping, ST Courier, TPC and Shiprocket shipments for free. Live status, full scan history, optional email alerts. Open source.",
     locale: "en_IN",
-    images: [
-      {
-        url: "/apple-icon.svg",
-        width: 180,
-        height: 180,
-        alt: "ShipTrack",
-      },
-    ],
+    // og:image comes from src/app/opengraph-image.png (1200×630) via the file
+    // convention — an SVG here is refused by WhatsApp, Slack and X.
   },
   twitter: {
-    card: "summary",
-    title: "ShipTrack — Free Blue Dart tracking with email alerts",
+    card: "summary_large_image",
+    title: TITLE,
     description:
-      "Track Blue Dart shipments for free. Live status, full scan history, optional email alerts.",
-    images: ["/apple-icon.svg"],
+      "Track Blue Dart, Delhivery, Amazon Shipping, ST Courier, TPC and Shiprocket shipments for free. Live status, full scan history, optional email alerts.",
   },
   robots: {
     index: true,
