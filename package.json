@@ -26,14 +26,14 @@
     "@opennextjs/cloudflare": "^1.19.11",
     "next": "^16.3.4",
     "react": "^19.2.8",
-    "react-dom": "^19.0.0",
+    "react-dom": "^19.3.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260918.1",
     "@types/node": "^22.10.0",
     "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.0.0",
+    "@types/react-dom": "^19.3.0",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.3.4",
     "typescript": "^5.7.0",
