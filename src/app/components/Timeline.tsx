@@ -1,4 +1,6 @@
 import type { TrackingEvent } from "@/carriers/types";
+import { displayCarrierDate } from "@/lib/dates";
+import { TimeAgo } from "./TimeAgo";
 
 // Vertical connected timeline of scan events, newest first. Shared by the
 // home-page tracking result and the dashboard "full history" modal so they
@@ -15,7 +17,9 @@ export function Timeline({ events }: { events: TrackingEvent[] }) {
   const ordered = events.slice().reverse();
   return (
     <ol style={{ margin: 0, padding: 0, listStyle: "none" }}>
-      {ordered.map((ev, i, arr) => (
+      {ordered.map((ev, i, arr) => {
+        const when = displayCarrierDate(ev.timestamp);
+        return (
         <li key={i} style={{ position: "relative", paddingLeft: 28, paddingBlock: 14 }}>
           <span
             aria-hidden
@@ -47,7 +51,13 @@ export function Timeline({ events }: { events: TrackingEvent[] }) {
           )}
           <div style={{ fontSize: 14, fontWeight: 500, color: "var(--fg)" }}>{ev.description}</div>
           <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span>{ev.timestamp}</span>
+            {when.text && <span title={when.date ? ev.timestamp : undefined}>{when.text}</span>}
+            {i === 0 && when.date && (
+              <>
+                <span style={{ color: "var(--muted-soft)" }}>·</span>
+                <TimeAgo date={when.date} style={{ color: "var(--accent)", fontWeight: 500 }} />
+              </>
+            )}
             {ev.location && (
               <>
                 <span style={{ color: "var(--muted-soft)" }}>·</span>
@@ -56,7 +66,8 @@ export function Timeline({ events }: { events: TrackingEvent[] }) {
             )}
           </div>
         </li>
-      ))}
+        );
+      })}
     </ol>
   );
 }
