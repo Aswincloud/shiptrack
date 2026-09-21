@@ -1,4 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
+import { carryForwardStatus, overallStatus } from "./normalize";
 
 // Shiprocket is a shipping aggregator. Its public tracking page resolves any
 // AWB to its underlying courier (Blue Dart, Delhivery, Ekart, XpressBees, …)
@@ -74,7 +75,7 @@ function parseScans(html: string): TrackingEvent[] {
   }
 
   // Page lists newest first; reverse so caller's events[last] is the latest.
-  return events.reverse();
+  return carryForwardStatus(events.reverse());
 }
 
 export const shiprocket: Carrier = {
@@ -114,12 +115,7 @@ export const shiprocket: Carrier = {
     // Prefer the latest scan's status — the page's top label can carry HTML
     // comment artifacts and ambiguous wording. Fall back to the label only
     // when there are no scans.
-    const latest = events[events.length - 1];
-    const status: ShipmentStatus = latest
-      ? latest.status
-      : statusBlock
-        ? mapStatus(statusBlock)
-        : "unknown";
+    const status: ShipmentStatus = overallStatus(events, statusBlock ? mapStatus(statusBlock) : undefined);
 
     return {
       carrier: "shiprocket",

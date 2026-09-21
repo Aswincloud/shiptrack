@@ -101,22 +101,32 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
     return;
   }
 
+  // The carrier's overall verdict (newest *known* scan, then its summary) is
+  // what the API and site show; use the same thing here so the dashboard can't
+  // disagree with the public track page. latest.status alone reads "unknown"
+  // whenever the newest scan is a remark the carrier mapper doesn't recognise.
+  const status = result.status !== "unknown" ? result.status : latest.status;
+
   const hash = await sha256Hex(`${latest.timestamp}|${latest.rawCode ?? ""}|${latest.description}`);
   if (hash === w.last_event_hash) {
     // No new scan since last poll. Still re-affirm terminality so a watch that
     // reached a terminal status without ever being marked complete (a pre-fix
     // row, or one first seen via the no-event path above) self-heals instead of
     // polling indefinitely. markPolled only flips status when complete is true.
+    // Likewise re-affirm the status itself, silently (no email): a mapper fix
+    // that turns a stored "unknown" into "in_transit" should reach the
+    // dashboard without waiting for the carrier to add a scan.
     await markPolled(env.DB, w.id, {
       estimatedDelivery: eta,
-      complete: TERMINAL.has(latest.status),
+      complete: TERMINAL.has(status),
       pollOutcome: "ok",
+      ...(status !== "unknown" && status !== w.last_known_status ? { lastKnownStatus: status } : {}),
     });
     return;
   }
 
   await recordEvent(env.DB, w.id, {
-    status: latest.status,
+    status,
     description: latest.description,
     location: latest.location,
     timestamp: latest.timestamp,
@@ -132,7 +142,7 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
         to: w.email,
         watch: w,
         oldStatus: w.last_known_status,
-        newStatus: latest.status,
+        newStatus: status,
         event: latest,
         estimatedDelivery: eta ?? w.estimated_delivery,
         unsubscribeUrl,
@@ -142,9 +152,9 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
     console.error(`notify failed for ${w.id}:`, err instanceof Error ? err.message : err);
   }
 
-  const complete = TERMINAL.has(latest.status);
+  const complete = TERMINAL.has(status);
   await markPolled(env.DB, w.id, {
-    lastKnownStatus: latest.status,
+    lastKnownStatus: status,
     lastEventHash: hash,
     estimatedDelivery: eta,
     complete,

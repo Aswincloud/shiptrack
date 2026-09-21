@@ -1,4 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
+import { carryForwardStatus, overallStatus } from "./normalize";
 
 // Blue Dart's commercial "Tracking API" requires customer credentials (LoginID
 // and a tracking-API License Key) issued by a Blue Dart account manager. They
@@ -21,10 +22,37 @@ function mapStatus(text: string): ShipmentStatus {
   if (t.includes("out for delivery")) return "out_for_delivery";
   if (t.includes("returned") || t.includes("rto")) return "returned";
   if (t.includes("picked up") || t.includes("pickup")) return "picked_up";
-  if (t.includes("address incomplete") || t.includes("premises closed") || t.includes("undelivered") || t.includes("attempt")) {
+  if (
+    t.includes("address incomplete") ||
+    t.includes("premises closed") ||
+    t.includes("undelivered") ||
+    t.includes("attempt") ||
+    t.includes("not available") ||
+    t.includes("refused") ||
+    t.includes("damaged") ||
+    t.includes("held") ||
+    t.includes("misroute") ||
+    t.includes("unclaimed") ||
+    t.includes("incorrect") ||
+    t.includes("consignee") ||
+    t.includes("cod not ready")
+  ) {
     return "exception";
   }
-  if (t.includes("in transit") || t.includes("arrived") || t.includes("connected") || t.includes("shipped")) {
+  // "Network Delay, Will Impact Delivery" and similar are still movement
+  // notices: the parcel is in the network, just late. Not an exception.
+  if (
+    t.includes("in transit") ||
+    t.includes("arrived") ||
+    t.includes("connected") ||
+    t.includes("shipped") ||
+    t.includes("delay") ||
+    t.includes("departed") ||
+    t.includes("dispatched") ||
+    t.includes("bagged") ||
+    t.includes("forwarded") ||
+    t.includes("received")
+  ) {
     return "in_transit";
   }
   return "unknown";
@@ -75,7 +103,7 @@ function parseScans(html: string): TrackingEvent[] {
   }
 
   // Page renders most-recent first; reverse so caller's `events[last]` is latest.
-  return events.reverse();
+  return carryForwardStatus(events.reverse());
 }
 
 export const bluedart: Carrier = {
@@ -114,12 +142,11 @@ export const bluedart: Carrier = {
     const origin = fieldByLabel(panel, "From");
     const destination = fieldByLabel(panel, "To");
     const events = parseScans(panel);
-    const latest = events[events.length - 1];
 
     return {
       carrier: "bluedart",
       trackingNumber: cleaned,
-      status: latest ? latest.status : status ? mapStatus(status) : "unknown",
+      status: overallStatus(events, status ? mapStatus(status) : undefined),
       estimatedDelivery: expectedDelivery,
       origin,
       destination,

@@ -1,4 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
+import { carryForwardStatus, overallStatus } from "./normalize";
 
 // The Professional Couriers (tpcindia.com) publishes no developer API. Their
 // website's Track n Trace form sits behind an image captcha, and the old
@@ -146,7 +147,7 @@ function parseFeed(text: string): TrackingEvent[] {
   if (unique.every((s) => Number.isFinite(s.time))) {
     unique.sort((a, b) => a.time - b.time);
   }
-  return unique.map((s) => s.event);
+  return carryForwardStatus(unique.map((s) => s.event));
 }
 
 export const tpc: Carrier = {
@@ -184,12 +185,10 @@ export const tpc: Carrier = {
     if (events.length === 0) {
       throw new CarrierError("Tracking number not found", "not_found", 404);
     }
-    const latest = events[events.length - 1];
-
     return {
       carrier: "tpc",
       trackingNumber: cleaned,
-      status: latest.status,
+      status: overallStatus(events),
       events,
       fetchedAt: new Date().toISOString(),
       raw: { source: "mobile-feed", url },

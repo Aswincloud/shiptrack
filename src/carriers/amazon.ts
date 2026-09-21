@@ -1,4 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
+import { carryForwardStatus, overallStatus } from "./normalize";
 
 // Amazon Shipping (India) — track.amazon.in. No credentials. The public tracker
 // SPA loads `GET /api/tracker/<id>` (the same call this carrier makes). Nested
@@ -145,12 +146,14 @@ function parseEvents(history: AmazonEvent[] | undefined): TrackingEvent[] {
   // poller's last-event hash still points at the newest scan.
   const times = events.map((e) => Date.parse(e.timestamp));
   if (times.every((t) => Number.isFinite(t))) {
-    return events
-      .map((e, i) => ({ e, t: times[i] }))
-      .sort((a, b) => a.t - b.t)
-      .map(({ e }) => e);
+    return carryForwardStatus(
+      events
+        .map((e, i) => ({ e, t: times[i] }))
+        .sort((a, b) => a.t - b.t)
+        .map(({ e }) => e),
+    );
   }
-  return events;
+  return carryForwardStatus(events);
 }
 
 export const amazon: Carrier = {
@@ -199,11 +202,7 @@ export const amazon: Carrier = {
     // so each step has to be filtered explicitly — `??` alone would stop at the
     // first "unknown" and never reach the later fallbacks.
     const summaryStatus = mapEventCode(tracker?.summary?.status ?? undefined);
-    const status: ShipmentStatus =
-      (latest && latest.status !== "unknown" ? latest.status : undefined) ??
-      mapTrackingStatus(meta?.trackingStatus?.stringValue) ??
-      (summaryStatus !== "unknown" ? summaryStatus : undefined) ??
-      "unknown";
+    const status: ShipmentStatus = overallStatus(events, mapTrackingStatus(meta?.trackingStatus?.stringValue), summaryStatus);
 
     if (!latest && status === "unknown") {
       throw new CarrierError("Tracking number not found", "not_found", 404);
