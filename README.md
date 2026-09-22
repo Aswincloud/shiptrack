@@ -183,10 +183,27 @@ followed a shared link, so it doesn't. A found shipment still routes
 signed-out visitors to signup — the guest path exists for the case where
 there's nothing to show them.
 
-Nobody has proved they own the address they typed, so a guest request is
-always double opt-in: the watch is created `pending`, a confirmation link goes
-out, and the poller ignores it until that link is clicked. Three limits bound
-what the form can be made to send (all in `src/lib/db.ts`):
+The form offers two channels, one watch each.
+
+**Email.** Nobody has proved they own the address they typed, so a guest
+request is always double opt-in: the watch is created `pending`, a confirmation
+link goes out, and the poller ignores it until that link is clicked.
+
+**WhatsApp** (shown only when [WhatsApp alerts](#whatsapp-alerts-optional) are
+configured). No number is typed. The visitor taps a `wa.me` link that opens
+WhatsApp on our business number with `VERIFY <code>` pre-filled; the inbound
+message carries their number and is itself the opt-in, so the watch activates
+the moment it arrives — no email, no link. The page polls the watch and flips
+to "Watching" on its own. Such rows have `email = ''` and their own `phone`.
+They get a message when the shipment first appears (whatever the status) and
+then on milestones only; `STOP` from that number cancels all its guest watches.
+A number may claim at most `MAX_GUEST_WATCHES_PER_PHONE_PER_DAY` (5) a day,
+and one watch per shipment; both are enforced when the message arrives, since
+that is when the number is known. Unclaimed requests are swept away once the
+code's 15-minute TTL passes.
+
+Three limits bound what the email form can be made to send (all in
+`src/lib/db.ts`):
 
 - a repeat request for the same address + shipment returns the existing watch
   instead of mailing the link again;
@@ -413,8 +430,9 @@ and are logged; nothing else breaks.
 With the secrets unset the Settings section is hidden and the poller never
 attempts a send, so this is safe to deploy before Meta has approved anything.
 
-Guest watches (no account) never get WhatsApp: there is no account to link a
-number to.
+Guest watches with an email never get WhatsApp — there is no account to link a
+number to. Signed-out visitors can instead pick WhatsApp as the channel on the
+"not found yet" form; see [Guest watch requests](#guest-watch-requests).
 
 ## License
 

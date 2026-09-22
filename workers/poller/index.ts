@@ -6,16 +6,18 @@ import {
   recordEvent,
   purgeDeliveredWatches,
   expireStalePendingGuestWatches,
+  expireUnclaimedGuestWhatsappWatches,
   getUserById,
   CONFIRM_TTL_SECONDS,
   DEAD_WATCH_SECONDS,
+  PHONE_LINK_TTL_SECONDS,
   type WatchRow,
 } from "../../src/lib/db";
 import { sendEmail, watchExpiredEmail } from "../../src/lib/email";
 import { signToken } from "../../src/lib/tokens";
 import { getCarrier } from "../../src/carriers/registry";
 import { emailResend } from "../../src/notifiers/email-resend";
-import { whatsappMeta, WHATSAPP_MILESTONES } from "../../src/notifiers/whatsapp";
+import { whatsappMeta, shouldNotifyWhatsapp } from "../../src/notifiers/whatsapp";
 import { CarrierError } from "../../src/carriers/types";
 
 interface Env {
@@ -151,35 +153,49 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
   const unsubToken = await signToken(env.TOKEN_SECRET, w.id, "unsubscribe");
   const unsubscribeUrl = `${env.APP_URL.replace(/\/$/, "")}/api/watches/unsubscribe?token=${encodeURIComponent(unsubToken)}`;
 
-  try {
-    await emailResend.send(
-      { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
-      {
-        to: w.email,
-        watch: w,
-        oldStatus: w.last_known_status,
-        newStatus: status,
-        event: latest,
-        estimatedDelivery: eta ?? w.estimated_delivery,
-        unsubscribeUrl,
-      },
-    );
-  } catch (err) {
-    console.error(`notify failed for ${w.id}:`, err instanceof Error ? err.message : err);
+  // Email, when the watch has an address. A guest WhatsApp watch has email ''
+  // (the column is NOT NULL) and nothing to mail.
+  if (w.email) {
+    try {
+      await emailResend.send(
+        { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
+        {
+          to: w.email,
+          watch: w,
+          oldStatus: w.last_known_status,
+          newStatus: status,
+          event: latest,
+          estimatedDelivery: eta ?? w.estimated_delivery,
+          unsubscribeUrl,
+        },
+      );
+    } catch (err) {
+      console.error(`notify failed for ${w.id}:`, err instanceof Error ? err.message : err);
+    }
   }
 
-  // WhatsApp rides alongside email for the watch's owner, on milestones only
-  // (WHATSAPP_MILESTONES): it is billed per message and interrupts a phone, so
-  // in-transit hops stay email-only. Requires a linked, verified, opted-in
-  // number on the owning account; guest watches have no owner and never
-  // qualify. Failure here must never affect the email or the poll bookkeeping.
-  if (w.user_id && WHATSAPP_MILESTONES.has(status) && env.WHATSAPP_PHONE_NUMBER_ID && env.WHATSAPP_ACCESS_TOKEN) {
+  // WhatsApp: the watch's own verified number (guest WhatsApp watches) first,
+  // else the owning account's linked, opted-in number. Milestones only, plus
+  // the very first scan — the "it appeared" moment a not-found-yet watch is
+  // for — since WhatsApp is billed per message and interrupts a phone.
+  // Failure here must never affect the email or the poll bookkeeping.
+  if (shouldNotifyWhatsapp(status, w.last_known_status === null) && env.WHATSAPP_PHONE_NUMBER_ID && env.WHATSAPP_ACCESS_TOKEN) {
     try {
-      const owner = await getUserById(env.DB, w.user_id);
-      if (owner?.phone && owner.phone_verified_at && owner.whatsapp_opt_in === 1) {
+      let to: string | null = null;
+      let recipientName: string | null = null;
+      if (w.phone && w.phone_verified_at) {
+        to = w.phone;
+      } else if (w.user_id) {
+        const owner = await getUserById(env.DB, w.user_id);
+        if (owner?.phone && owner.phone_verified_at && owner.whatsapp_opt_in === 1) {
+          to = owner.phone;
+          recipientName = owner.name;
+        }
+      }
+      if (to) {
         await whatsappMeta.send(env, {
-          to: owner.phone,
-          recipientName: owner.name,
+          to,
+          recipientName,
           watch: w,
           oldStatus: w.last_known_status,
           newStatus: status,
@@ -210,6 +226,9 @@ async function expireDeadWatch(env: Env, w: WatchRow): Promise<void> {
   // the actual transition so nobody gets this twice.
   const changed = await cancelWatch(env.DB, w.id);
   if (!changed) return;
+  // A WhatsApp-only watch has nobody to email, and a business-initiated
+  // WhatsApp message would need its own template; the log line above is it.
+  if (!w.email) return;
   try {
     const msg = watchExpiredEmail({
       appUrl: env.APP_URL.replace(/\/$/, ""),
@@ -262,6 +281,14 @@ export default {
           if (n > 0) console.log(`expired ${n} unconfirmed guest watches`);
         })
         .catch((e) => console.error("guest expiry sweep failed:", e instanceof Error ? e.message : e)),
+    );
+    // And guest WhatsApp watches whose link code lapsed before a message came.
+    ctx.waitUntil(
+      expireUnclaimedGuestWhatsappWatches(env.DB, now, PHONE_LINK_TTL_SECONDS)
+        .then((n) => {
+          if (n > 0) console.log(`expired ${n} unclaimed guest WhatsApp watches`);
+        })
+        .catch((e) => console.error("guest whatsapp expiry sweep failed:", e instanceof Error ? e.message : e)),
     );
 
     const due = await listDueWatches(env.DB, now, BATCH_SIZE);

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { buttonGhostStyle, cardStyle, statusPillStyle } from "../../styles";
 import { humanStatus } from "@/lib/status";
+import { formatPhoneForDisplay } from "@/lib/whatsapp";
 import type { AdminWatchRequest } from "./types";
 import { th, td } from "./tableStyles";
 
@@ -17,7 +18,8 @@ const CARRIER_LABELS: Record<string, string> = {
 };
 
 // How a watch request is doing, in the operator's terms rather than the
-// database's: "pending" means the visitor hasn't clicked their link yet.
+// database's: "pending" means the visitor hasn't clicked their link (email)
+// or sent their VERIFY message (WhatsApp) yet.
 const REQUEST_STATE: Record<string, { label: string; color: string }> = {
   pending: { label: "Awaiting confirmation", color: "var(--warning)" },
   active: { label: "Confirmed", color: "var(--success)" },
@@ -79,7 +81,7 @@ export function AdminWatchRequests({ initialRequests }: { initialRequests: Admin
             <table className="data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
               <thead>
                 <tr style={{ color: "var(--muted)", fontSize: 12, textAlign: "left" }}>
-                  <th style={th}>Email</th>
+                  <th style={th}>Contact</th>
                   <th style={th}>Shipment</th>
                   <th style={th}>Request</th>
                   <th style={th}>Latest status</th>
@@ -91,7 +93,14 @@ export function AdminWatchRequests({ initialRequests }: { initialRequests: Admin
                   const state = REQUEST_STATE[r.status] ?? { label: r.status, color: "var(--muted)" };
                   return (
                     <tr key={r.id}>
-                      <td style={td} data-label="Email">{r.email}</td>
+                      <td style={td} data-label="Contact">
+                        {r.email ||
+                          (r.phone ? (
+                            <span title="WhatsApp">WhatsApp {formatPhoneForDisplay(r.phone)}</span>
+                          ) : (
+                            <span style={{ color: "var(--muted)" }}>WhatsApp · awaiting message</span>
+                          ))}
+                      </td>
                       <td style={td} data-label="Shipment">
                         <Link
                           href={`/track/${encodeURIComponent(r.carrier)}/${encodeURIComponent(r.tracking_number)}`}

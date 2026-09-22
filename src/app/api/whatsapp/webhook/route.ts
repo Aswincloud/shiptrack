@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEnv, type AppEnv } from "@/lib/env";
 import {
+  cancelGuestWatchesForPhone,
+  cancelWatch,
+  countGuestWatchesForPhoneSince,
+  deleteWatchPhoneVerification,
+  findActiveGuestWatchForPhone,
   findPhoneVerificationByCode,
+  findWatchPhoneVerificationByCode,
   getUserByPhone,
+  getWatch,
   linkUserPhone,
+  linkWatchPhone,
   setWhatsappOptIn,
+  MAX_GUEST_WATCHES_PER_PHONE_PER_DAY,
 } from "@/lib/db";
+import { getCarrier } from "@/carriers/registry";
 import {
   isStartMessage,
   isStopMessage,
@@ -112,23 +122,72 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
       );
       return;
     }
+    // A guest "tell me when it appears" watch: the message is both the proof of
+    // the number and the opt-in for this one shipment, so it goes straight to
+    // active — no email, no confirmation link. Caps and duplicates are decided
+    // here because this is the first moment we know the number.
+    const wv = await findWatchPhoneVerificationByCode(env.DB, code, now);
+    if (wv) {
+      const w = await getWatch(env.DB, wv.watch_id);
+      if (!w || w.status !== "pending") {
+        await deleteWatchPhoneVerification(env.DB, wv.watch_id);
+        return;
+      }
+      const shipment = `${getCarrier(w.carrier)?.name ?? w.carrier} ${w.tracking_number}`;
+      const claimedToday = await countGuestWatchesForPhoneSince(env.DB, m.from, now - 24 * 60 * 60);
+      if (claimedToday >= MAX_GUEST_WATCHES_PER_PHONE_PER_DAY) {
+        await cancelWatch(env.DB, w.id);
+        await deleteWatchPhoneVerification(env.DB, w.id);
+        console.log(`whatsapp guest watch ${w.id} refused: ${m.from} at daily cap`);
+        await reply(env, m.from, `This number already has ${MAX_GUEST_WATCHES_PER_PHONE_PER_DAY} shipment alerts today. Create a free ShipTrack account to watch more: ${env.APP_URL}`);
+        return;
+      }
+      const dup = await findActiveGuestWatchForPhone(env.DB, m.from, w.carrier, w.tracking_number);
+      if (dup) {
+        await cancelWatch(env.DB, w.id);
+        await deleteWatchPhoneVerification(env.DB, w.id);
+        console.log(`whatsapp guest watch ${w.id} duplicate of ${dup.id} for ${m.from}`);
+        await reply(env, m.from, `You're already getting WhatsApp updates for ${shipment} here.`);
+        return;
+      }
+      const linked = await linkWatchPhone(env.DB, w.id, m.from);
+      if (!linked) return; // lost a race with the sweep; nothing to say
+      console.log(`whatsapp guest watch ${w.id} (${w.carrier}/${w.tracking_number}) linked to ${m.from}`);
+      await reply(
+        env,
+        m.from,
+        `✅ Watching ${shipment}. We'll message you here as soon as it appears, then when it's picked up, out for delivery, delivered, or runs into a problem. Reply STOP to stop.`,
+      );
+      return;
+    }
     // Consumed or expired. If this number is already linked, the overwhelmingly
     // likely cause is the relay redelivering the very message that linked it
     // (Meta retries when any other receiver of our shared number was down) —
     // stay silent rather than tell a freshly-connected user their code failed.
     const already = await getUserByPhone(env.DB, m.from);
     if (already?.phone_verified_at) return;
-    await reply(env, m.from, "That code has expired or isn't valid. Open ShipTrack → Settings → WhatsApp alerts to get a fresh one.");
+    // Same for a guest watch the sender already claimed a moment ago.
+    if ((await countGuestWatchesForPhoneSince(env.DB, m.from, now - 60 * 60)) > 0) return;
+    await reply(env, m.from, "That code has expired or isn't valid. Go back to the tracking page (or ShipTrack → Settings) to get a fresh one.");
     return;
   }
 
   const user = await getUserByPhone(env.DB, m.from);
 
   if (isStopMessage(text)) {
-    if (user) {
-      await setWhatsappOptIn(env.DB, user.id, false);
-      console.log(`whatsapp STOP from ${m.from} (user ${user.id})`);
-      await reply(env, m.from, "ShipTrack WhatsApp alerts are off. Reply START to turn them back on, or manage this in Settings.");
+    // Both kinds of alert this number could be getting: an account's linked
+    // number, and guest watches claimed from a tracking page.
+    if (user) await setWhatsappOptIn(env.DB, user.id, false);
+    const stopped = await cancelGuestWatchesForPhone(env.DB, m.from);
+    if (user || stopped > 0) {
+      console.log(`whatsapp STOP from ${m.from}${user ? ` (user ${user.id})` : ""}${stopped ? ` — ${stopped} guest watch(es) cancelled` : ""}`);
+      await reply(
+        env,
+        m.from,
+        user
+          ? "ShipTrack WhatsApp alerts are off. Reply START to turn them back on, or manage this in Settings."
+          : "ShipTrack WhatsApp alerts are off for this number. To watch a shipment again, use Notify me on its tracking page.",
+      );
     }
     return;
   }
@@ -137,6 +196,10 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
       await setWhatsappOptIn(env.DB, user.id, true);
       console.log(`whatsapp START from ${m.from} (user ${user.id})`);
       await reply(env, m.from, "ShipTrack WhatsApp alerts are back on.");
+    } else if ((await countGuestWatchesForPhoneSince(env.DB, m.from, 0)) > 0) {
+      // Cancelled guest watches aren't revived — the shipment may be long
+      // delivered — but tell them how to start a new one.
+      await reply(env, m.from, `To get WhatsApp updates for a shipment again, open it at ${env.APP_URL} and tap Notify me.`);
     }
     return;
   }

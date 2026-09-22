@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getEnv } from "@/lib/env";
+import { generateOtp } from "@aswincloud/auth/d1";
 import {
   cancelWatch,
   createWatch,
   confirmWatch,
+  linkCodeInUse,
+  upsertWatchPhoneVerification,
+  PHONE_LINK_TTL_SECONDS,
   countGuestWatchesForEmailSince,
   countGuestWatchesSince,
   countOpenWatchesForUser,
@@ -22,11 +26,18 @@ import { getCarrier } from "@/carriers/registry";
 import { readSession } from "@/lib/auth";
 import { signToken } from "@/lib/tokens";
 import { sendEmail, watchCreatedEmail, confirmEmail } from "@/lib/email";
+import { buildWaLink, formatPhoneForDisplay, linkMessageText, whatsappLinkingConfigured } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
-  email: z.string().email().max(254),
+  // Required for the email channel; absent for a guest WhatsApp watch, whose
+  // recipient is learned from the message they send us.
+  email: z.string().email().max(254).optional(),
+  // "whatsapp" (guests only): no address, no confirmation link — the visitor
+  // sends us "VERIFY <code>" from WhatsApp and that message both proves the
+  // number and confirms the watch. Default "email".
+  channel: z.enum(["email", "whatsapp"]).optional(),
   carrier: z.string().min(1).max(32),
   trackingNumber: z.string().min(4).max(40),
   label: z.string().max(80).optional(),
@@ -82,12 +93,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_input", details: parsed.error.flatten() }, { status: 400 });
   }
   const { email, carrier, trackingNumber, label } = parsed.data;
+  const channel = parsed.data.channel ?? "email";
+  if (channel === "email" && !email) {
+    return NextResponse.json({ error: "invalid_input", details: { email: "required" } }, { status: 400 });
+  }
+  if (channel === "whatsapp" && !guest) {
+    // Signed-in users' watches already reach the number linked in Settings.
+    return NextResponse.json(
+      { error: "signed_in_use_settings", message: "WhatsApp alerts for your account use the number linked in Settings." },
+      { status: 400 },
+    );
+  }
+  if (channel === "whatsapp" && !whatsappLinkingConfigured(env)) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
 
   if (!getCarrier(carrier)) {
     return NextResponse.json({ error: "carrier_not_supported" }, { status: 400 });
   }
 
-  const cleanedEmail = email.toLowerCase();
+  const cleanedEmail = (email ?? "").toLowerCase();
   const cleanedCarrier = carrier.toLowerCase();
   const cleanedTracking = trackingNumber.trim();
   const cleanedLabel = label ?? null;
@@ -107,31 +132,35 @@ export async function POST(req: NextRequest) {
 
   if (guest) {
     const now = Math.floor(Date.now() / 1000);
-    // Repeat request for the same shipment while the link we already sent is
-    // still good: say so rather than mailing the address again. Once that link
-    // has expired the old row is ignored and a fresh one goes out.
-    const existing = await findOpenGuestWatch(env.DB, cleanedEmail, cleanedCarrier, cleanedTracking, now);
-    if (existing) {
-      return NextResponse.json(
-        {
-          status: existing.status === "active" ? "active" : "pending_confirmation",
-          id: existing.id,
-          duplicate: true,
-        },
-        { status: 200 },
-      );
-    }
+    if (channel === "email") {
+      // Repeat request for the same shipment while the link we already sent is
+      // still good: say so rather than mailing the address again. Once that link
+      // has expired the old row is ignored and a fresh one goes out.
+      const existing = await findOpenGuestWatch(env.DB, cleanedEmail, cleanedCarrier, cleanedTracking, now);
+      if (existing) {
+        return NextResponse.json(
+          {
+            status: existing.status === "active" ? "active" : "pending_confirmation",
+            id: existing.id,
+            duplicate: true,
+          },
+          { status: 200 },
+        );
+      }
 
-    const perEmail = await countGuestWatchesForEmailSince(env.DB, cleanedEmail, now - 24 * 60 * 60);
-    if (perEmail >= MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY) {
-      return NextResponse.json(
-        {
-          error: "rate_limited",
-          message: `That address has already requested ${MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY} shipment alerts today. Create an account to watch more.`,
-        },
-        { status: 429 },
-      );
+      const perEmail = await countGuestWatchesForEmailSince(env.DB, cleanedEmail, now - 24 * 60 * 60);
+      if (perEmail >= MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY) {
+        return NextResponse.json(
+          {
+            error: "rate_limited",
+            message: `That address has already requested ${MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY} shipment alerts today. Create an account to watch more.`,
+          },
+          { status: 429 },
+        );
+      }
     }
+    // (WhatsApp guests: the per-number cap and duplicate check run in the
+    // webhook, once the sender's number is known.)
     const siteWide = await countGuestWatchesSince(env.DB, now - 60 * 60);
     if (siteWide >= MAX_GUEST_WATCHES_PER_HOUR) {
       return NextResponse.json(
@@ -142,6 +171,40 @@ export async function POST(req: NextRequest) {
         { status: 429 },
       );
     }
+  }
+
+  if (channel === "whatsapp") {
+    // Create the watch pending with no recipient yet; the webhook fills in the
+    // number and activates it when "VERIFY <code>" arrives from WhatsApp.
+    const now = Math.floor(Date.now() / 1000);
+    const id = crypto.randomUUID();
+    await createWatch(env.DB, {
+      id,
+      userId: null,
+      email: "", // NOT NULL column; '' = no email recipient
+      carrier: cleanedCarrier,
+      trackingNumber: cleanedTracking,
+      label: cleanedLabel,
+      pollIntervalSeconds: DEFAULT_POLL_INTERVAL_SECONDS,
+    });
+    // Six digits from a CSPRNG, unique across user-link and watch-link codes so
+    // an inbound code can only ever mean one thing.
+    let code = generateOtp();
+    for (let i = 0; i < 5 && (await linkCodeInUse(env.DB, code, now)); i++) code = generateOtp();
+    const expiresAt = now + PHONE_LINK_TTL_SECONDS;
+    await upsertWatchPhoneVerification(env.DB, id, code, expiresAt);
+    return NextResponse.json(
+      {
+        status: "pending_whatsapp",
+        id,
+        code,
+        message: linkMessageText(code),
+        waLink: buildWaLink(env.WHATSAPP_BUSINESS_NUMBER!, code),
+        businessNumberDisplay: formatPhoneForDisplay(env.WHATSAPP_BUSINESS_NUMBER!),
+        expiresAt,
+      },
+      { status: 201 },
+    );
   }
 
   // A watch may only mail an address that has agreed to hear from us. Your own
