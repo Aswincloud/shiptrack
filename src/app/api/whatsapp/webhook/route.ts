@@ -32,6 +32,12 @@ export const dynamic = "force-dynamic";
 // Every POST is authenticated by X-Hub-Signature-256 (HMAC of the raw body
 // with the app secret) — the endpoint is public, and an unsigned request could
 // otherwise link any number to any pending code.
+//
+// Meta calls wa-relay (one callback URL per app), which forwards the raw body
+// and signature header to every receiver of the number. Ours is the support
+// number, shared with Chatwoot, so everything customers write to support also
+// arrives here: act only on VERIFY/STOP/START, log the rest, and stay quiet
+// on anything that could be a redelivery.
 
 // GET: Meta's one-time subscription handshake. It sends its challenge and the
 // verify token the operator pasted into the dashboard; echo the challenge back
@@ -106,11 +112,14 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
       );
       return;
     }
-    // Only treat a stray 6-digit number as a failed link if it looked like one.
-    if (/verify/i.test(text)) {
-      await reply(env, m.from, "That code has expired or isn't valid. Open ShipTrack → Settings → WhatsApp alerts to get a fresh one.");
-      return;
-    }
+    // Consumed or expired. If this number is already linked, the overwhelmingly
+    // likely cause is the relay redelivering the very message that linked it
+    // (Meta retries when any other receiver of our shared number was down) —
+    // stay silent rather than tell a freshly-connected user their code failed.
+    const already = await getUserByPhone(env.DB, m.from);
+    if (already?.phone_verified_at) return;
+    await reply(env, m.from, "That code has expired or isn't valid. Open ShipTrack → Settings → WhatsApp alerts to get a fresh one.");
+    return;
   }
 
   const user = await getUserByPhone(env.DB, m.from);
