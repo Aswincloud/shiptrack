@@ -10,6 +10,7 @@ import {
   countOpenWatchesForUser,
   findOpenGuestWatch,
   getUserById,
+  CONFIRM_TTL_SECONDS,
   DEFAULT_POLL_INTERVAL_SECONDS,
   MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY,
   MAX_GUEST_WATCHES_PER_HOUR,
@@ -23,9 +24,6 @@ import { signToken } from "@/lib/tokens";
 import { sendEmail, watchCreatedEmail, confirmEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
-
-// How long a third-party confirmation link stays good for.
-const CONFIRM_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 const Body = z.object({
   email: z.string().email().max(254),
@@ -108,9 +106,11 @@ export async function POST(req: NextRequest) {
   }
 
   if (guest) {
-    // Repeat request for the same shipment: the link we already sent is still
-    // good, so say so rather than mailing the address again.
-    const existing = await findOpenGuestWatch(env.DB, cleanedEmail, cleanedCarrier, cleanedTracking);
+    const now = Math.floor(Date.now() / 1000);
+    // Repeat request for the same shipment while the link we already sent is
+    // still good: say so rather than mailing the address again. Once that link
+    // has expired the old row is ignored and a fresh one goes out.
+    const existing = await findOpenGuestWatch(env.DB, cleanedEmail, cleanedCarrier, cleanedTracking, now);
     if (existing) {
       return NextResponse.json(
         {
@@ -122,7 +122,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const now = Math.floor(Date.now() / 1000);
     const perEmail = await countGuestWatchesForEmailSince(env.DB, cleanedEmail, now - 24 * 60 * 60);
     if (perEmail >= MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY) {
       return NextResponse.json(

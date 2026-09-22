@@ -4,6 +4,7 @@ import { getEnv } from "@/lib/env";
 import {
   cancelWatchForUser,
   confirmWatch,
+  CONFIRM_TTL_SECONDS,
   getUserById,
   getWatchForUser,
   setWatchPendingForUser,
@@ -17,7 +18,6 @@ import { sendEmail, confirmEmail } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
-const CONFIRM_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 const PatchBody = z.object({
   label: z.string().max(80).nullable().optional(),
