@@ -222,12 +222,16 @@ export function parseLinkCode(text: string): string | null {
   return m ? m[1] : null;
 }
 
+// Opt-out / opt-in keywords. The whole message, nothing else: our number is
+// also the support line, and "cancel my order" or "stop sending me the wrong
+// item" must never flip somebody's shipment alerts. Chatwoot's bot skips
+// exactly these same forms (offhours-bot/app.py) so a customer gets one reply.
 export function isStopMessage(text: string): boolean {
-  return /^\s*(stop|unsubscribe|cancel|opt\s*out)\b/i.test(text);
+  return /^\W*(stop|unsubscribe)\W*$/i.test(text);
 }
 
 export function isStartMessage(text: string): boolean {
-  return /^\s*(start|subscribe|resume|opt\s*in)\b/i.test(text);
+  return /^\W*(start|subscribe|resume)\W*$/i.test(text);
 }
 
 // ---------------------------------------------------------------------------
