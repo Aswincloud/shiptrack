@@ -35,6 +35,8 @@ export interface AppEnv {
   WHATSAPP_BUSINESS_NUMBER?: string;
   WHATSAPP_APP_SECRET?: string;
   WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
+  WHATSAPP_OTP_TEMPLATE_NAME?: string;
+  WHATSAPP_OTP_TEMPLATE_LANG?: string;
   WHATSAPP_API_BASE?: string;
 }
 

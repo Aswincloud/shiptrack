@@ -162,6 +162,15 @@ export const ADMIN_WATCH_REQUEST_LIMIT = 200;
 // enough to switch apps and send; short enough that six digits never collide.
 export const PHONE_LINK_TTL_SECONDS = 15 * 60;
 
+// "Enter your number" one-time codes (migration 0016). TTL matches the
+// shiptrack_verify template's own "Expires in 10 minutes." footer.
+export const PHONE_OTP_TTL_SECONDS = 10 * 60;
+export const PHONE_OTP_MAX_ATTEMPTS = 5;
+export const PHONE_OTP_RESEND_COOLDOWN_SECONDS = 60;
+// Each send is a billed message to a number nobody has proved they hold yet.
+export const MAX_PHONE_OTP_SENDS_PER_USER_PER_DAY = 5;
+export const MAX_PHONE_OTP_SENDS_PER_PHONE_PER_DAY = 5;
+
 export async function createWatch(db: D1Database, w: NewWatch): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const interval = w.pollIntervalSeconds ?? DEFAULT_POLL_INTERVAL_SECONDS;
@@ -771,6 +780,7 @@ export async function linkUserPhone(db: D1Database, userId: string, phone: strin
       .prepare(`UPDATE users SET phone = ?, phone_verified_at = ?, whatsapp_opt_in = 1 WHERE id = ?`)
       .bind(phone, now, userId),
     db.prepare(`DELETE FROM phone_verifications WHERE user_id = ?`).bind(userId),
+    db.prepare(`DELETE FROM phone_otp_codes WHERE user_id = ?`).bind(userId),
   ]);
 }
 
@@ -787,6 +797,80 @@ export async function unlinkUserPhone(db: D1Database, userId: string): Promise<v
   await db.batch([
     db.prepare(`UPDATE users SET phone = NULL, phone_verified_at = NULL, whatsapp_opt_in = 0 WHERE id = ?`).bind(userId),
     db.prepare(`DELETE FROM phone_verifications WHERE user_id = ?`).bind(userId),
+    db.prepare(`DELETE FROM phone_otp_codes WHERE user_id = ?`).bind(userId),
+  ]);
+}
+
+// --- "Enter your number" one-time codes ---
+
+export interface PhoneOtpRow {
+  user_id: string;
+  phone: string;
+  code_hash: string;
+  expires_at: number;
+  attempts: number;
+  created_at: number;
+}
+
+export async function upsertPhoneOtp(
+  db: D1Database,
+  userId: string,
+  phone: string,
+  codeHash: string,
+  expiresAt: number,
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO phone_otp_codes (user_id, phone, code_hash, expires_at, attempts, created_at)
+       VALUES (?, ?, ?, ?, 0, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         phone = excluded.phone, code_hash = excluded.code_hash, expires_at = excluded.expires_at,
+         attempts = 0, created_at = excluded.created_at`,
+    )
+    .bind(userId, phone, codeHash, expiresAt, now)
+    .run();
+}
+
+export async function getPhoneOtp(db: D1Database, userId: string): Promise<PhoneOtpRow | null> {
+  const row = await db.prepare(`SELECT * FROM phone_otp_codes WHERE user_id = ?`).bind(userId).first<PhoneOtpRow>();
+  return row ?? null;
+}
+
+export async function incrementPhoneOtpAttempts(db: D1Database, userId: string): Promise<void> {
+  await db.prepare(`UPDATE phone_otp_codes SET attempts = attempts + 1 WHERE user_id = ?`).bind(userId).run();
+}
+
+export async function deletePhoneOtp(db: D1Database, userId: string): Promise<void> {
+  await db.prepare(`DELETE FROM phone_otp_codes WHERE user_id = ?`).bind(userId).run();
+}
+
+export async function recordPhoneOtpSend(db: D1Database, userId: string, phone: string): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db.prepare(`INSERT INTO phone_otp_sends (user_id, phone, created_at) VALUES (?, ?, ?)`).bind(userId, phone, now).run();
+}
+
+export async function countPhoneOtpSendsForUserSince(db: D1Database, userId: string, since: number): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM phone_otp_sends WHERE user_id = ? AND created_at >= ?`)
+    .bind(userId, since)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+export async function countPhoneOtpSendsForPhoneSince(db: D1Database, phone: string, since: number): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM phone_otp_sends WHERE phone = ? AND created_at >= ?`)
+    .bind(phone, since)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Drop expired codes and the send log behind the daily limits once it is a day old. */
+export async function purgeExpiredPhoneOtps(db: D1Database, now: number): Promise<void> {
+  await db.batch([
+    db.prepare(`DELETE FROM phone_otp_codes WHERE expires_at < ?`).bind(now),
+    db.prepare(`DELETE FROM phone_otp_sends WHERE created_at < ?`).bind(now - 24 * 60 * 60),
   ]);
 }
 

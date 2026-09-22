@@ -19,6 +19,8 @@ export interface WhatsAppEnv {
   WHATSAPP_BUSINESS_NUMBER?: string; // E.164 digits of the business number users message to link
   WHATSAPP_APP_SECRET?: string; // Meta app secret; validates X-Hub-Signature-256 on webhooks
   WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string; // the string pasted into Meta's webhook config
+  WHATSAPP_OTP_TEMPLATE_NAME?: string; // authentication template for "enter your number" linking (shiptrack_verify)
+  WHATSAPP_OTP_TEMPLATE_LANG?: string; // defaults to WHATSAPP_TEMPLATE_LANG
   WHATSAPP_API_BASE?: string; // override for tests / proxies; default https://graph.facebook.com
 }
 
@@ -69,6 +71,35 @@ export function whatsappLinkingConfigured(env: WhatsAppEnv): boolean {
     !!env.WHATSAPP_APP_SECRET &&
     !!env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
   );
+}
+
+/** True when the "enter your number" (one-time code) path can be offered. */
+export function whatsappOtpConfigured(env: WhatsAppEnv): boolean {
+  return whatsappConfigured(env) && !!env.WHATSAPP_OTP_TEMPLATE_NAME;
+}
+
+/**
+ * Normalise a typed number to Meta's wire form: E.164 digits, no "+".
+ * Accepts "+91 98765 43210", "0091-98765-43210", "919876543210". A bare
+ * 10-digit number starting 6-9 (with or without a leading trunk 0) is the
+ * Indian national mobile format — this is an India-first product and the
+ * business number is Indian — so it gets +91; anything else without a country
+ * code can't be guessed and is rejected rather than mis-sent.
+ */
+export function normalizePhone(input: string, defaultCountryCode = "91"): string | null {
+  let s = input.trim().replace(/[\s().-]/g, "");
+  if (s.startsWith("+")) s = s.slice(1);
+  else if (s.startsWith("00")) s = s.slice(2);
+  else {
+    const national = s.replace(/^0/, "");
+    if (/^[6-9][0-9]{9}$/.test(national)) s = defaultCountryCode + national;
+    // Any other ten digits with no prefix is a national number typed without
+    // its country code — an Indian landline like 0413 235 7944, say — and
+    // passing it through would send to +41 32… instead. Ask for the code.
+    else if (/^0?[0-9]{10}$/.test(s)) return null;
+  }
+  if (!/^[1-9][0-9]{7,14}$/.test(s)) return null;
+  return s;
 }
 
 /** "919876543210" -> "+91 9876543210" for display. Country-code split is best-effort. */
@@ -191,6 +222,28 @@ export function sendTrackingUpdate(env: WhatsAppEnv, to: string, p: TrackingUpda
  */
 export function sendText(env: WhatsAppEnv, to: string, body: string): Promise<string> {
   return post(env, { to, type: "text", text: { preview_url: false, body: sanitizeParam(body, 1000) } });
+}
+
+/**
+ * One-time code via the authentication template. Meta's OTP templates take the
+ * code twice: as the single body parameter and as the parameter of the "Copy
+ * code" button, which is a URL button on the wire (sub_type "url", index "0").
+ * Confirmed against shiptrack_verify's definition: BODY {{1}}, FOOTER
+ * "Expires in 10 minutes.", BUTTONS [URL "Copy code"].
+ */
+export function sendOtp(env: WhatsAppEnv, to: string, code: string): Promise<string> {
+  if (!env.WHATSAPP_OTP_TEMPLATE_NAME) {
+    throw new WhatsAppError("WHATSAPP_OTP_TEMPLATE_NAME is not set", "not_configured");
+  }
+  return sendTemplate(env, {
+    to,
+    template: env.WHATSAPP_OTP_TEMPLATE_NAME,
+    lang: env.WHATSAPP_OTP_TEMPLATE_LANG || env.WHATSAPP_TEMPLATE_LANG || DEFAULT_TEMPLATE_LANG,
+    components: [
+      { type: "body", parameters: [{ type: "text", text: code }] },
+      { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
+    ],
+  });
 }
 
 // ---------------------------------------------------------------------------

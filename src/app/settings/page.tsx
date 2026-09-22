@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
 import { readSessionFromCookies } from "@/lib/auth";
-import { getPhoneVerification, getUserById } from "@/lib/db";
+import { getPhoneOtp, getPhoneVerification, getUserById } from "@/lib/db";
 import { hasRealPassword } from "@aswincloud/auth/d1";
 import { whatsappStatusFor } from "@/lib/whatsapp-status";
 import { SettingsClient } from "./client";
@@ -21,6 +21,7 @@ export default async function SettingsPage() {
   // An outstanding link code survives navigation: coming back to Settings
   // mid-flow shows the same code, not a fresh "Connect" button.
   const pendingLink = await getPhoneVerification(env.DB, user.id);
+  const pendingOtp = await getPhoneOtp(env.DB, user.id);
 
   return (
     <SettingsClient
@@ -29,7 +30,7 @@ export default async function SettingsPage() {
       isAdmin={user.is_admin === 1}
       hasPassword={hasRealPassword(user)}
       createdAt={user.created_at}
-      whatsapp={whatsappStatusFor(env, user, pendingLink)}
+      whatsapp={whatsappStatusFor(env, user, pendingLink, pendingOtp)}
     />
   );
 }

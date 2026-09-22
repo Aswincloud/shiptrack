@@ -385,6 +385,15 @@ message with the sender's number, and that number is bound to their account.
 Nothing to type, nothing to mistype, and the proof of ownership is the message
 itself. The same webhook honours `STOP` / `START` and logs replies to alerts.
 
+**Fallback for desktops.** With an approved Authentication-category template
+(`WHATSAPP_OTP_TEMPLATE_NAME`, e.g. `shiptrack_verify`) Settings also offers
+"enter your number instead": a one-time code is sent to the typed number and
+typed back. Same end state. It is the fallback rather than the default because
+it costs a message per attempt and sends to a number nobody has proved they
+hold yet — so it is signed-in only, hashed at rest, 5 attempts, 10-minute TTL
+(matching the template's footer), and limited to 5 sends a day per account and
+per number. Bare 10-digit numbers starting 6–9 are read as Indian (+91).
+
 ### Template
 
 Create a **Utility** template in WhatsApp Manager with five positional
