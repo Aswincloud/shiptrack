@@ -1,5 +1,6 @@
 import { Notifier, NotifierError } from "./types";
 import { emailResend } from "./email-resend";
+import { whatsappMeta } from "./whatsapp";
 
 function stub(id: string, name: string): Notifier {
   return {
@@ -13,6 +14,7 @@ function stub(id: string, name: string): Notifier {
 
 export const notifiers: Record<string, Notifier> = {
   [emailResend.id]: emailResend,
+  [whatsappMeta.id]: whatsappMeta,
   webhook: stub("webhook", "Webhook"),
   sms: stub("sms", "SMS"),
   slack: stub("slack", "Slack"),

@@ -24,6 +24,11 @@ export async function GET(req: NextRequest) {
     isAdmin: user.is_admin === 1,
     hasPassword: hasRealPassword(user),
     createdAt: user.created_at,
+    whatsapp: {
+      phone: user.phone,
+      verified: user.phone_verified_at !== null,
+      optIn: user.whatsapp_opt_in === 1,
+    },
   });
 }
 

@@ -350,6 +350,72 @@ npx wrangler deployments status -c wrangler.poller.jsonc
 `Source: deployment` with a recent timestamp is a real deploy; `version_upload`
 next to a stale active version means the deploy step is failing.
 
+## WhatsApp alerts (optional)
+
+Signed-in users can opt in to WhatsApp messages on the milestones that matter —
+picked up, out for delivery, delivered, exception, returned — alongside the
+email alerts, which still cover every scan. Messages go out through Meta's
+WhatsApp Cloud API using a pre-approved **utility** template.
+
+### How linking works
+
+Meta requires the recipient's opt-in before a business may message them, and
+authentication (OTP) templates are only available to Meta-verified businesses.
+So instead of us sending a code, **the user sends us one**: Settings hands them
+a six-digit code and a `wa.me` link that opens WhatsApp on our business number
+with `VERIFY <code>` pre-filled. They tap send. Meta's webhook delivers the
+message with the sender's number, and that number is bound to their account.
+Nothing to type, nothing to mistype, and the proof of ownership is the message
+itself. The same webhook honours `STOP` / `START` and logs replies to alerts.
+
+### Template
+
+Create a **Utility** template in WhatsApp Manager with five positional
+parameters, in this order: recipient name, shipment, location, time, status.
+The one this repo was built against:
+
+```
+Hi {{1}}, There is an update on your shipment {{2}}. 📍 {{3}} 🕐 {{4}} {{5}}
+If you think any tracking detail is incorrect, please reply to this message.
+```
+
+Set `WHATSAPP_TEMPLATE_NAME` / `WHATSAPP_TEMPLATE_LANG` to its exact name and
+language code. Until Meta approves it, sends fail with `template_unavailable`
+and are logged; nothing else breaks.
+
+### Setup
+
+1. **Meta App Dashboard → WhatsApp → API Setup**: note the *Phone number ID*
+   and create a permanent System User access token with
+   `whatsapp_business_messaging`. Put the app in **Live** mode — in Development
+   mode Meta only delivers to a short allow-list of test numbers.
+2. **Meta App Dashboard → WhatsApp → Configuration → Webhook**:
+   - Callback URL: `https://<your-app>/api/whatsapp/webhook`
+   - Verify token: any random string (this becomes `WHATSAPP_WEBHOOK_VERIFY_TOKEN`)
+   - Click *Verify and save*, then subscribe to the **`messages`** field.
+3. **Meta App Dashboard → App settings → Basic**: copy the *App secret*
+   (`WHATSAPP_APP_SECRET`). Every webhook call is checked against it.
+4. Set the secrets. The web worker needs all of them; the poller only sends:
+
+   ```bash
+   for k in WHATSAPP_PHONE_NUMBER_ID WHATSAPP_ACCESS_TOKEN WHATSAPP_BUSINESS_NUMBER \
+            WHATSAPP_TEMPLATE_NAME WHATSAPP_TEMPLATE_LANG \
+            WHATSAPP_APP_SECRET WHATSAPP_WEBHOOK_VERIFY_TOKEN; do
+     npx wrangler secret put "$k"
+   done
+   for k in WHATSAPP_PHONE_NUMBER_ID WHATSAPP_ACCESS_TOKEN WHATSAPP_TEMPLATE_NAME WHATSAPP_TEMPLATE_LANG; do
+     npx wrangler secret put "$k" -c wrangler.poller.jsonc
+   done
+   ```
+
+5. Apply `migrations/0014_whatsapp.sql` (`npm run db:migrate:remote`).
+
+With the secrets unset the Settings section is hidden and the poller never
+attempts a send, so this is safe to deploy before Meta has approved anything.
+
+Guest watches (no account) never get WhatsApp: there is no account to link a
+number to.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

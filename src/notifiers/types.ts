@@ -1,8 +1,13 @@
 import type { WatchRow } from "@/lib/db";
 import type { TrackingEvent } from "@/carriers/types";
+import type { WhatsAppEnv } from "@/lib/whatsapp";
 
 export interface NotificationPayload {
+  // Recipient address in the notifier's own terms: an email address for the
+  // email notifier, E.164 digits for WhatsApp.
   to: string;
+  // Recipient's display name, when the notifier can use one (WhatsApp's {{1}}).
+  recipientName?: string | null;
   watch: WatchRow;
   oldStatus: string | null;
   newStatus: string;
@@ -12,7 +17,7 @@ export interface NotificationPayload {
   unsubscribeUrl: string;
 }
 
-export interface NotifierEnv {
+export interface NotifierEnv extends WhatsAppEnv {
   RESEND_API_KEY?: string;
   RESEND_FROM?: string;
   APP_URL: string;

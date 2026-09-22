@@ -29,6 +29,18 @@ export interface UserRow {
   created_at: number;
   is_admin: number;
   name: string | null;
+  // WhatsApp: linked number (E.164 digits), when it was linked, and whether
+  // alerts are on. See migrations/0014_whatsapp.sql.
+  phone: string | null;
+  phone_verified_at: number | null;
+  whatsapp_opt_in: number;
+}
+
+export interface PhoneVerificationRow {
+  user_id: string;
+  code: string;
+  expires_at: number;
+  created_at: number;
 }
 
 export interface AdminUserView {
@@ -136,6 +148,10 @@ export const CONFIRM_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 // How many guest/operator watch requests the admin dashboard lists at once.
 export const ADMIN_WATCH_REQUEST_LIMIT = 200;
+
+// How long a WhatsApp link code stays valid once Settings hands it out. Long
+// enough to switch apps and send; short enough that six digits never collide.
+export const PHONE_LINK_TTL_SECONDS = 15 * 60;
 
 export async function createWatch(db: D1Database, w: NewWatch): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -543,6 +559,93 @@ export async function getUserByEmail(db: D1Database, email: string): Promise<Use
 export async function getUserById(db: D1Database, id: string): Promise<UserRow | null> {
   const row = await db.prepare(`SELECT * FROM users WHERE id = ?`).bind(id).first<UserRow>();
   return row ?? null;
+}
+
+// --- WhatsApp linking ---
+
+export async function getUserByPhone(db: D1Database, phone: string): Promise<UserRow | null> {
+  const row = await db.prepare(`SELECT * FROM users WHERE phone = ?`).bind(phone).first<UserRow>();
+  return row ?? null;
+}
+
+/** Issue (or refresh) the user's outstanding link code. */
+export async function upsertPhoneVerification(
+  db: D1Database,
+  userId: string,
+  code: string,
+  expiresAt: number,
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO phone_verifications (user_id, code, expires_at, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         code = excluded.code,
+         expires_at = excluded.expires_at,
+         created_at = excluded.created_at`,
+    )
+    .bind(userId, code, expiresAt, now)
+    .run();
+}
+
+export async function getPhoneVerification(db: D1Database, userId: string): Promise<PhoneVerificationRow | null> {
+  const row = await db
+    .prepare(`SELECT * FROM phone_verifications WHERE user_id = ?`)
+    .bind(userId)
+    .first<PhoneVerificationRow>();
+  return row ?? null;
+}
+
+/** The unexpired verification a code belongs to, if any. */
+export async function findPhoneVerificationByCode(
+  db: D1Database,
+  code: string,
+  now: number,
+): Promise<PhoneVerificationRow | null> {
+  const row = await db
+    .prepare(`SELECT * FROM phone_verifications WHERE code = ? AND expires_at > ?`)
+    .bind(code, now)
+    .first<PhoneVerificationRow>();
+  return row ?? null;
+}
+
+export async function deletePhoneVerification(db: D1Database, userId: string): Promise<void> {
+  await db.prepare(`DELETE FROM phone_verifications WHERE user_id = ?`).bind(userId).run();
+}
+
+/**
+ * Bind a number to an account after its owner messaged us from it. A number
+ * belongs to whoever last proved they hold the phone, so any other account
+ * that had it is unlinked in the same transaction; the used code is consumed.
+ */
+export async function linkUserPhone(db: D1Database, userId: string, phone: string): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db.batch([
+    db
+      .prepare(`UPDATE users SET phone = NULL, phone_verified_at = NULL, whatsapp_opt_in = 0 WHERE phone = ? AND id != ?`)
+      .bind(phone, userId),
+    db
+      .prepare(`UPDATE users SET phone = ?, phone_verified_at = ?, whatsapp_opt_in = 1 WHERE id = ?`)
+      .bind(phone, now, userId),
+    db.prepare(`DELETE FROM phone_verifications WHERE user_id = ?`).bind(userId),
+  ]);
+}
+
+/** Toggle alerts. Refuses (returns false) unless a verified number is linked. */
+export async function setWhatsappOptIn(db: D1Database, userId: string, on: boolean): Promise<boolean> {
+  const res = await db
+    .prepare(`UPDATE users SET whatsapp_opt_in = ? WHERE id = ? AND phone IS NOT NULL AND phone_verified_at IS NOT NULL`)
+    .bind(on ? 1 : 0, userId)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+export async function unlinkUserPhone(db: D1Database, userId: string): Promise<void> {
+  await db.batch([
+    db.prepare(`UPDATE users SET phone = NULL, phone_verified_at = NULL, whatsapp_opt_in = 0 WHERE id = ?`).bind(userId),
+    db.prepare(`DELETE FROM phone_verifications WHERE user_id = ?`).bind(userId),
+  ]);
 }
 
 export async function markEmailVerified(db: D1Database, userId: string): Promise<void> {
