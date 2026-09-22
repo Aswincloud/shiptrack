@@ -129,6 +129,11 @@ export const MAX_OPEN_WATCHES_PER_USER = 50;
 export const MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY = 5;
 export const MAX_GUEST_WATCHES_PER_HOUR = 30;
 
+// How long a confirmation link (third-party or guest watch) stays valid. Shared
+// by the routes that sign the token and by the guest duplicate check / sweep
+// below, so "is this pending row still confirmable" has exactly one answer.
+export const CONFIRM_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 // How many guest/operator watch requests the admin dashboard lists at once.
 export const ADMIN_WATCH_REQUEST_LIMIT = 200;
 
@@ -208,23 +213,51 @@ export async function countOpenWatchesForUser(db: D1Database, userId: string): P
 // An in-flight watch this address already has for the same shipment. Used to
 // answer a repeat guest request with "we already emailed you" instead of
 // sending the same confirmation link again.
+//
+// A pending row only counts while its link can still be clicked. Past
+// CONFIRM_TTL_SECONDS the link is dead and nothing else can activate the row,
+// so treating it as "open" would answer every retry with "already emailed you"
+// and lock that address out of that shipment for good. Guest tokens are signed
+// at creation, so created_at is the link's issue time.
 export async function findOpenGuestWatch(
   db: D1Database,
   email: string,
   carrier: string,
   trackingNumber: string,
+  now: number,
 ): Promise<WatchRow | null> {
   const row = await db
     .prepare(
       `SELECT * FROM watches
        WHERE user_id IS NULL AND email = ? AND carrier = ? AND tracking_number = ?
-         AND status IN ('pending','active')
+         AND (status = 'active' OR (status = 'pending' AND created_at >= ?))
        ORDER BY created_at DESC
        LIMIT 1`,
     )
-    .bind(email, carrier, trackingNumber)
+    .bind(email, carrier, trackingNumber, now - CONFIRM_TTL_SECONDS)
     .first<WatchRow>();
   return row ?? null;
+}
+
+// Retire guest requests whose confirmation link expired unclicked. Nobody can
+// activate them any more: this keeps the table from growing, gives the admin
+// "watch requests" view an outcome instead of an eternal "pending", and backs
+// up the age check in findOpenGuestWatch. Guest rows only — an owned watch
+// parked at 'pending' by a PATCH got its link at PATCH time, not created_at,
+// and its owner can re-save the address for a fresh link anyway.
+export async function expireStalePendingGuestWatches(
+  db: D1Database,
+  now: number,
+  ttlSeconds: number,
+): Promise<number> {
+  const res = await db
+    .prepare(
+      `UPDATE watches SET status='cancelled'
+       WHERE user_id IS NULL AND status='pending' AND created_at < ?`,
+    )
+    .bind(now - ttlSeconds)
+    .run();
+  return res.meta?.changes ?? 0;
 }
 
 // Guest requests made for one address since `since` (unix seconds). Cancelled

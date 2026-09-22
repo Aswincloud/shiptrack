@@ -5,6 +5,8 @@ import {
   markPolled,
   recordEvent,
   purgeDeliveredWatches,
+  expireStalePendingGuestWatches,
+  CONFIRM_TTL_SECONDS,
   DEAD_WATCH_SECONDS,
   type WatchRow,
 } from "../../src/lib/db";
@@ -92,8 +94,14 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
     // has since dropped. Only result.status carries it on this path, so run the
     // terminal check off that. Without it the watch stays 'active' forever: it
     // never moves to the dashboard's "Delivered" section and keeps polling.
+    //
+    // Don't store "unknown" as the status here: the never-scanned fast window
+    // and the dead-watch check both key off last_known_status IS NULL, and the
+    // dashboard reads NULL as "awaiting first scan". A carrier page with a
+    // result panel but no scans yet (Blue Dart does this) would otherwise flip
+    // the row to the string "unknown" and silently drop it out of all three.
     await markPolled(env.DB, w.id, {
-      lastKnownStatus: result.status,
+      ...(result.status !== "unknown" ? { lastKnownStatus: result.status } : {}),
       estimatedDelivery: eta,
       complete: TERMINAL.has(result.status),
       pollOutcome: "ok",
@@ -211,6 +219,16 @@ export default {
           if (n > 0) console.log(`purged ${n} delivered watches`);
         })
         .catch((e) => console.error("purge failed:", e instanceof Error ? e.message : e)),
+    );
+
+    // Retire guest requests whose confirmation link expired unclicked. Same
+    // best-effort footing as the purge.
+    ctx.waitUntil(
+      expireStalePendingGuestWatches(env.DB, now, CONFIRM_TTL_SECONDS)
+        .then((n) => {
+          if (n > 0) console.log(`expired ${n} unconfirmed guest watches`);
+        })
+        .catch((e) => console.error("guest expiry sweep failed:", e instanceof Error ? e.message : e)),
     );
 
     const due = await listDueWatches(env.DB, now, BATCH_SIZE);
