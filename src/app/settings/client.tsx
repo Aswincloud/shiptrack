@@ -9,6 +9,7 @@ import { PasswordStrength } from "../components/PasswordStrength";
 // Mirrors GET /api/whatsapp/link.
 interface WhatsAppStatus {
   available: boolean;
+  otpAvailable: boolean;
   phone: string | null;
   phoneDisplay: string | null;
   verified: boolean;
@@ -20,6 +21,7 @@ interface WhatsAppStatus {
     businessNumberDisplay: string;
     expiresAt: number;
   } | null;
+  otp: { phoneDisplay: string; expiresAt: number } | null;
 }
 
 interface Props {
@@ -472,15 +474,26 @@ function DangerSection({ hasPassword }: { hasPassword: boolean }) {
   );
 }
 
-// Opt-in WhatsApp alerts, linked by messaging us rather than typing a number:
-// the code the user sends is how the webhook knows which account the sender's
-// number belongs to. While a code is outstanding this polls GET so the page
-// flips to "connected" a few seconds after they hit send in WhatsApp.
+// Opt-in WhatsApp alerts. Two ways to link a number, one end state:
+//  - Message us (default): we hand out a code, the user sends "VERIFY <code>"
+//    from WhatsApp, the webhook reads their number off the message. Nothing to
+//    type, free, and the proof is the message itself. Best on a phone.
+//  - Enter a number (fallback): for a desktop without WhatsApp on it. We send a
+//    one-time code to the typed number via the shiptrack_verify template and
+//    they type it back. Costs a message and is rate-limited, hence not default.
+// While a message-first code is outstanding this polls GET so the page flips
+// to "connected" a few seconds after they hit send in WhatsApp.
 function WhatsAppSection({ initial }: { initial: WhatsAppStatus }) {
   const [st, setSt] = useState<WhatsAppStatus>(initial);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const wasPending = useRef(false);
+  // "Enter your number" state. A code we already sent survives a reload via st.otp.
+  const [otpMode, setOtpMode] = useState<boolean>(!!initial.otp);
+  const [otpPhone, setOtpPhone] = useState("");
+  const [otpSent, setOtpSent] = useState<{ phoneDisplay: string; expiresAt: number } | null>(initial.otp);
+  const [otpCode, setOtpCode] = useState("");
+  const [tick, setTick] = useState(() => Math.floor(Date.now() / 1000));
 
   async function refresh() {
     const res = await fetch("/api/whatsapp/link");
@@ -504,6 +517,13 @@ function WhatsAppSection({ initial }: { initial: WhatsAppStatus }) {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [st.pending?.code]);
+
+  // Countdown for the one-time code.
+  useEffect(() => {
+    if (!otpSent) return;
+    const id = setInterval(() => setTick(Math.floor(Date.now() / 1000)), 15000);
+    return () => clearInterval(id);
+  }, [otpSent]);
 
   async function start() {
     setBusy(true);
@@ -543,12 +563,66 @@ function WhatsAppSection({ initial }: { initial: WhatsAppStatus }) {
     setBusy(false);
     if (res.ok || res.status === 204) {
       wasPending.current = false;
-      setSt((s) => ({ ...s, phone: null, phoneDisplay: null, verified: false, optIn: false, pending: null }));
+      setSt((s) => ({ ...s, phone: null, phoneDisplay: null, verified: false, optIn: false, pending: null, otp: null }));
+      setOtpSent(null);
+      setOtpCode("");
       setFeedback(kind === "disconnect" ? { kind: "ok", text: "WhatsApp disconnected." } : null);
     }
   }
 
+  // From the message-first wait screen to typing a number: drop the unused
+  // link code first so the two paths never both sit outstanding.
+  async function switchToOtp() {
+    await unlink("cancel");
+    setOtpMode(true);
+  }
+
+  async function otpSend(e?: React.FormEvent) {
+    e?.preventDefault();
+    setBusy(true);
+    setFeedback(null);
+    const res = await fetch("/api/whatsapp/otp/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(otpPhone.trim() ? { phone: otpPhone.trim() } : {}),
+    });
+    const j = (await res.json().catch(() => ({}))) as { error?: string; phoneDisplay?: string; expiresAt?: number; retryAfter?: number };
+    setBusy(false);
+    if (res.ok && j.phoneDisplay && j.expiresAt) {
+      setOtpSent({ phoneDisplay: j.phoneDisplay, expiresAt: j.expiresAt });
+      setOtpCode("");
+      setTick(Math.floor(Date.now() / 1000));
+      setFeedback({ kind: "ok", text: `Code sent to ${j.phoneDisplay} on WhatsApp.` });
+      return;
+    }
+    setFeedback({ kind: "err", text: otpErrorText(j.error, j) });
+  }
+
+  async function otpVerify(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setFeedback(null);
+    const res = await fetch("/api/whatsapp/otp/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: otpCode.trim() }),
+    });
+    const j = (await res.json().catch(() => ({}))) as WhatsAppStatus & { error?: string; attemptsLeft?: number };
+    setBusy(false);
+    if (res.ok) {
+      setOtpMode(false);
+      setOtpSent(null);
+      setOtpCode("");
+      setSt(j);
+      setFeedback({ kind: "ok", text: `Connected to ${j.phoneDisplay}. Alerts are on.` });
+      return;
+    }
+    if (j.error === "expired" || j.error === "no_code" || j.error === "too_many_attempts") setOtpCode("");
+    setFeedback({ kind: "err", text: otpErrorText(j.error, j) });
+  }
+
   const minutesLeft = st.pending ? Math.max(0, Math.ceil((st.pending.expiresAt - Date.now() / 1000) / 60)) : 0;
+  const otpMinutesLeft = otpSent ? Math.max(0, Math.ceil((otpSent.expiresAt - tick) / 60)) : 0;
 
   return (
     <section style={{ ...cardStyle, marginBottom: 20 }}>
@@ -609,24 +683,134 @@ function WhatsAppSection({ initial }: { initial: WhatsAppStatus }) {
             Waiting for your message… this page updates by itself.{" "}
             {minutesLeft > 0 ? `Code expires in ${minutesLeft} min.` : "Code expiring."}
           </p>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <button type="button" onClick={start} disabled={busy} style={buttonGhostStyle}>
               Get a new code
             </button>
             <button type="button" onClick={() => unlink("cancel")} disabled={busy} style={buttonGhostStyle}>
               Cancel
             </button>
+            {st.otpAvailable && (
+              <button type="button" onClick={switchToOtp} disabled={busy} style={linkButtonStyle}>
+                Can&apos;t send from here? Enter your number instead
+              </button>
+            )}
           </div>
         </>
+      ) : otpMode ? (
+        otpSent ? (
+          <form onSubmit={otpVerify} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5 }}>
+              We sent a code to <strong>{otpSent.phoneDisplay}</strong> on WhatsApp.{" "}
+              <span style={{ color: "var(--muted)" }}>
+                {otpMinutesLeft > 0 ? `It expires in ${otpMinutesLeft} min.` : "It has expired — request a new one."}
+              </span>
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                value={otpCode}
+                onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                pattern="\d{6}"
+                maxLength={6}
+                autoComplete="one-time-code"
+                placeholder="6-digit code"
+                aria-label="Verification code"
+                required
+                style={{ ...inputStyle, width: 160, fontSize: 18, letterSpacing: "0.12em", textAlign: "center" }}
+              />
+              <button type="submit" disabled={busy || otpCode.length !== 6} style={buttonStyle}>
+                {busy ? "…" : "Verify"}
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button type="button" onClick={() => otpSend()} disabled={busy} style={buttonGhostStyle}>
+                Send again
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpSent(null);
+                  setOtpCode("");
+                  setFeedback(null);
+                }}
+                disabled={busy}
+                style={buttonGhostStyle}
+              >
+                Use a different number
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpMode(false);
+                  setOtpSent(null);
+                  setOtpCode("");
+                  setFeedback(null);
+                }}
+                disabled={busy}
+                style={linkButtonStyle}
+              >
+                Back
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={otpSend} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <p style={{ margin: 0, color: "var(--muted)", fontSize: 14, lineHeight: 1.5 }}>
+              We&apos;ll send a one-time code to this number on WhatsApp. Include the country code.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                type="tel"
+                value={otpPhone}
+                onChange={(e) => setOtpPhone(e.target.value)}
+                placeholder="+91 98765 43210"
+                aria-label="WhatsApp number"
+                autoComplete="tel"
+                required
+                style={{ ...inputStyle, width: 220 }}
+              />
+              <button type="submit" disabled={busy || !otpPhone.trim()} style={buttonStyle}>
+                {busy ? "…" : "Send code"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpMode(false);
+                  setFeedback(null);
+                }}
+                disabled={busy}
+                style={linkButtonStyle}
+              >
+                Back
+              </button>
+            </div>
+          </form>
+        )
       ) : (
         <>
           <p style={{ margin: "0 0 14px", color: "var(--muted)", fontSize: 14, lineHeight: 1.5 }}>
             Get the moments that matter — picked up, out for delivery, delivered, problems — on WhatsApp as well as
             email. Connect by sending us a short message; we read your number from it.
           </p>
-          <button type="button" onClick={start} disabled={busy} style={buttonStyle}>
-            {busy ? "…" : "Connect WhatsApp"}
-          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" onClick={start} disabled={busy} style={buttonStyle}>
+              {busy ? "…" : "Connect WhatsApp"}
+            </button>
+            {st.otpAvailable && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOtpMode(true);
+                  setFeedback(null);
+                }}
+                disabled={busy}
+                style={linkButtonStyle}
+              >
+                Or enter your number instead
+              </button>
+            )}
+          </div>
         </>
       )}
 
@@ -638,6 +822,45 @@ function WhatsAppSection({ initial }: { initial: WhatsAppStatus }) {
     </section>
   );
 }
+
+function otpErrorText(error: string | undefined, j: { retryAfter?: number; attemptsLeft?: number }): string {
+  switch (error) {
+    case "invalid_phone":
+      return "That doesn't look like a WhatsApp number. Include the country code, e.g. +91 98765 43210.";
+    case "not_on_whatsapp":
+      return "That number isn't on WhatsApp, or can't receive messages from businesses.";
+    case "cooldown":
+      return `Please wait ${j.retryAfter ?? 60}s before requesting another code.`;
+    case "rate_limited":
+      return "Too many codes requested today. Try again tomorrow, or connect by sending us a message instead.";
+    case "template_unavailable":
+    case "not_configured":
+      return "Codes aren't available right now. Connect by sending us a message instead.";
+    case "send_failed":
+      return "We couldn't send the code. Try again shortly.";
+    case "no_code":
+    case "expired":
+      return "That code has expired. Request a new one.";
+    case "too_many_attempts":
+      return "Too many wrong attempts. Request a new code.";
+    case "invalid_code":
+      return j.attemptsLeft !== undefined ? `That code isn't right. ${j.attemptsLeft} attempt${j.attemptsLeft === 1 ? "" : "s"} left.` : "That code isn't right.";
+    default:
+      return "Something went wrong. Try again.";
+  }
+}
+
+const linkButtonStyle: React.CSSProperties = {
+  background: "none",
+  border: "none",
+  padding: "6px 4px",
+  color: "var(--accent)",
+  fontSize: 13,
+  fontWeight: 500,
+  cursor: "pointer",
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
+};
 
 const labelStyle: React.CSSProperties = {
   display: "flex",

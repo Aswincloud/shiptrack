@@ -5,6 +5,7 @@ import { getEnv } from "@/lib/env";
 import { readSession } from "@/lib/auth";
 import {
   deletePhoneVerification,
+  getPhoneOtp,
   getPhoneVerification,
   linkCodeInUse,
   getUserById,
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
   const user = await getUserById(env.DB, sess.userId);
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const pending = await getPhoneVerification(env.DB, user.id);
-  return NextResponse.json(whatsappStatusFor(env, user, pending));
+  return NextResponse.json(whatsappStatusFor(env, user, pending, await getPhoneOtp(env.DB, user.id)));
 }
 
 // Start (or restart) linking: mint a code and return the wa.me link. Re-using
@@ -53,7 +54,10 @@ export async function POST(req: NextRequest) {
   const expiresAt = now + PHONE_LINK_TTL_SECONDS;
   await upsertPhoneVerification(env.DB, user.id, code, expiresAt);
 
-  return NextResponse.json(whatsappStatusFor(env, user, { code, expires_at: expiresAt }), { status: 201 });
+  return NextResponse.json(
+    whatsappStatusFor(env, user, { code, expires_at: expiresAt }, await getPhoneOtp(env.DB, user.id)),
+    { status: 201 },
+  );
 }
 
 const PatchBody = z.object({ optIn: z.boolean() });

@@ -8,6 +8,7 @@ import {
   expireStalePendingGuestWatches,
   expireUnclaimedGuestWhatsappWatches,
   getUserById,
+  purgeExpiredPhoneOtps,
   CONFIRM_TTL_SECONDS,
   DEAD_WATCH_SECONDS,
   PHONE_LINK_TTL_SECONDS,
@@ -289,6 +290,12 @@ export default {
           if (n > 0) console.log(`expired ${n} unclaimed guest WhatsApp watches`);
         })
         .catch((e) => console.error("guest whatsapp expiry sweep failed:", e instanceof Error ? e.message : e)),
+    );
+    // Expired "enter your number" codes, and the send log once it is a day old.
+    ctx.waitUntil(
+      purgeExpiredPhoneOtps(env.DB, now).catch((e) =>
+        console.error("phone otp sweep failed:", e instanceof Error ? e.message : e),
+      ),
     );
 
     const due = await listDueWatches(env.DB, now, BATCH_SIZE);
