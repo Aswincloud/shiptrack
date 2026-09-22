@@ -210,11 +210,14 @@ export function buildWaLink(businessNumber: string, code: string): string {
 }
 
 /**
- * Pull a link code out of an inbound message. Lenient: the keyword is optional
- * and case-insensitive, and the code is any run of exactly six digits — users
- * edit pre-filled text, and some clients add punctuation.
+ * Pull a link code out of an inbound message: the VERIFY keyword (any case)
+ * plus a run of exactly six digits, in any order, with any punctuation. The
+ * keyword is required: our number is also the support line, where customers
+ * type order numbers and one-time codes all day, and a bare six digits must
+ * never be mistaken for a link attempt. The wa.me link pre-fills both parts.
  */
 export function parseLinkCode(text: string): string | null {
+  if (!/\bverify\b/i.test(text)) return null;
   const m = text.match(/\b(\d{6})\b/);
   return m ? m[1] : null;
 }
