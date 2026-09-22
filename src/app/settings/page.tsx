@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { getEnv } from "@/lib/env";
 import { readSessionFromCookies } from "@/lib/auth";
-import { getUserById } from "@/lib/db";
+import { getPhoneVerification, getUserById } from "@/lib/db";
 import { hasRealPassword } from "@aswincloud/auth/d1";
+import { whatsappStatusFor } from "@/lib/whatsapp-status";
 import { SettingsClient } from "./client";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,9 @@ export default async function SettingsPage() {
 
   const user = await getUserById(env.DB, sess.userId);
   if (!user) redirect("/login");
+  // An outstanding link code survives navigation: coming back to Settings
+  // mid-flow shows the same code, not a fresh "Connect" button.
+  const pendingLink = await getPhoneVerification(env.DB, user.id);
 
   return (
     <SettingsClient
@@ -25,6 +29,7 @@ export default async function SettingsPage() {
       isAdmin={user.is_admin === 1}
       hasPassword={hasRealPassword(user)}
       createdAt={user.created_at}
+      whatsapp={whatsappStatusFor(env, user, pendingLink)}
     />
   );
 }

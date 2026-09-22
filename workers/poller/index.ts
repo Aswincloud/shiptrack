@@ -6,6 +6,7 @@ import {
   recordEvent,
   purgeDeliveredWatches,
   expireStalePendingGuestWatches,
+  getUserById,
   CONFIRM_TTL_SECONDS,
   DEAD_WATCH_SECONDS,
   type WatchRow,
@@ -14,6 +15,7 @@ import { sendEmail, watchExpiredEmail } from "../../src/lib/email";
 import { signToken } from "../../src/lib/tokens";
 import { getCarrier } from "../../src/carriers/registry";
 import { emailResend } from "../../src/notifiers/email-resend";
+import { whatsappMeta, WHATSAPP_MILESTONES } from "../../src/notifiers/whatsapp";
 import { CarrierError } from "../../src/carriers/types";
 
 interface Env {
@@ -23,6 +25,12 @@ interface Env {
   RESEND_FROM: string;
   APP_URL: string;
   DELHIVERY_API_TOKEN?: string;
+  // WhatsApp alerts — optional; unset ⇒ never attempted.
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+  WHATSAPP_ACCESS_TOKEN?: string;
+  WHATSAPP_TEMPLATE_NAME?: string;
+  WHATSAPP_TEMPLATE_LANG?: string;
+  WHATSAPP_API_BASE?: string;
 }
 
 const BATCH_SIZE = 50;
@@ -158,6 +166,31 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
     );
   } catch (err) {
     console.error(`notify failed for ${w.id}:`, err instanceof Error ? err.message : err);
+  }
+
+  // WhatsApp rides alongside email for the watch's owner, on milestones only
+  // (WHATSAPP_MILESTONES): it is billed per message and interrupts a phone, so
+  // in-transit hops stay email-only. Requires a linked, verified, opted-in
+  // number on the owning account; guest watches have no owner and never
+  // qualify. Failure here must never affect the email or the poll bookkeeping.
+  if (w.user_id && WHATSAPP_MILESTONES.has(status) && env.WHATSAPP_PHONE_NUMBER_ID && env.WHATSAPP_ACCESS_TOKEN) {
+    try {
+      const owner = await getUserById(env.DB, w.user_id);
+      if (owner?.phone && owner.phone_verified_at && owner.whatsapp_opt_in === 1) {
+        await whatsappMeta.send(env, {
+          to: owner.phone,
+          recipientName: owner.name,
+          watch: w,
+          oldStatus: w.last_known_status,
+          newStatus: status,
+          event: latest,
+          estimatedDelivery: eta ?? w.estimated_delivery,
+          unsubscribeUrl,
+        });
+      }
+    } catch (err) {
+      console.error(`whatsapp notify failed for ${w.id}:`, err instanceof Error ? err.message : err);
+    }
   }
 
   const complete = TERMINAL.has(status);

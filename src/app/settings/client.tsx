@@ -1,10 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, pageWrapStyle } from "../styles";
 import { PasswordStrength } from "../components/PasswordStrength";
+
+// Mirrors GET /api/whatsapp/link.
+interface WhatsAppStatus {
+  available: boolean;
+  phone: string | null;
+  phoneDisplay: string | null;
+  verified: boolean;
+  optIn: boolean;
+  pending: {
+    code: string;
+    message: string;
+    waLink: string;
+    businessNumberDisplay: string;
+    expiresAt: number;
+  } | null;
+}
 
 interface Props {
   email: string;
@@ -12,6 +28,7 @@ interface Props {
   isAdmin: boolean;
   hasPassword: boolean;
   createdAt: number;
+  whatsapp: WhatsAppStatus;
 }
 
 export function SettingsClient(props: Props) {
@@ -30,6 +47,7 @@ export function SettingsClient(props: Props) {
         createdAt={props.createdAt}
         isAdmin={props.isAdmin}
       />
+      {props.whatsapp.available && <WhatsAppSection initial={props.whatsapp} />}
       <PasswordSection hasPassword={props.hasPassword} />
       <DangerSection hasPassword={props.hasPassword} />
 
@@ -449,6 +467,173 @@ function DangerSection({ hasPassword }: { hasPassword: boolean }) {
             </button>
           </div>
         </form>
+      )}
+    </section>
+  );
+}
+
+// Opt-in WhatsApp alerts, linked by messaging us rather than typing a number:
+// the code the user sends is how the webhook knows which account the sender's
+// number belongs to. While a code is outstanding this polls GET so the page
+// flips to "connected" a few seconds after they hit send in WhatsApp.
+function WhatsAppSection({ initial }: { initial: WhatsAppStatus }) {
+  const [st, setSt] = useState<WhatsAppStatus>(initial);
+  const [busy, setBusy] = useState(false);
+  const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const wasPending = useRef(false);
+
+  async function refresh() {
+    const res = await fetch("/api/whatsapp/link");
+    if (!res.ok) return;
+    const next = (await res.json()) as WhatsAppStatus;
+    setSt(next);
+    if (wasPending.current && !next.pending) {
+      setFeedback(
+        next.verified
+          ? { kind: "ok", text: `Connected to ${next.phoneDisplay}. Alerts are on.` }
+          : { kind: "err", text: "That code expired before we heard from you. Start again to get a new one." },
+      );
+    }
+    wasPending.current = !!next.pending;
+  }
+
+  useEffect(() => {
+    if (!st.pending) return;
+    wasPending.current = true;
+    const id = setInterval(() => void refresh(), 3000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [st.pending?.code]);
+
+  async function start() {
+    setBusy(true);
+    setFeedback(null);
+    const res = await fetch("/api/whatsapp/link", { method: "POST" });
+    setBusy(false);
+    if (res.ok) {
+      setSt((await res.json()) as WhatsAppStatus);
+      return;
+    }
+    setFeedback({
+      kind: "err",
+      text: res.status === 503 ? "WhatsApp alerts aren't available on this site yet." : "Couldn't start linking. Try again.",
+    });
+  }
+
+  async function toggle(on: boolean) {
+    setBusy(true);
+    const res = await fetch("/api/whatsapp/link", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ optIn: on }),
+    });
+    setBusy(false);
+    if (res.ok) {
+      setSt((s) => ({ ...s, optIn: on }));
+      setFeedback({ kind: "ok", text: on ? "WhatsApp alerts are on." : "WhatsApp alerts are off." });
+    } else {
+      setFeedback({ kind: "err", text: "Couldn't change that. Try again." });
+    }
+  }
+
+  async function unlink(kind: "cancel" | "disconnect") {
+    if (kind === "disconnect" && !confirm("Disconnect WhatsApp? You'll stop getting alerts there until you connect again.")) return;
+    setBusy(true);
+    const res = await fetch("/api/whatsapp/link", { method: "DELETE" });
+    setBusy(false);
+    if (res.ok || res.status === 204) {
+      wasPending.current = false;
+      setSt((s) => ({ ...s, phone: null, phoneDisplay: null, verified: false, optIn: false, pending: null }));
+      setFeedback(kind === "disconnect" ? { kind: "ok", text: "WhatsApp disconnected." } : null);
+    }
+  }
+
+  const minutesLeft = st.pending ? Math.max(0, Math.ceil((st.pending.expiresAt - Date.now() / 1000) / 60)) : 0;
+
+  return (
+    <section style={{ ...cardStyle, marginBottom: 20 }}>
+      <h2 style={sectionTitle}>WhatsApp alerts</h2>
+
+      {st.verified && st.phone ? (
+        <>
+          <p style={{ margin: "0 0 12px", fontSize: 14 }}>
+            Connected to <strong>{st.phoneDisplay}</strong> ·{" "}
+            <span style={{ color: st.optIn ? "var(--success)" : "var(--muted)", fontWeight: 600 }}>
+              alerts {st.optIn ? "on" : "off"}
+            </span>
+          </p>
+          <p style={{ margin: "0 0 14px", color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
+            You&apos;ll get a WhatsApp message when a shipment is picked up, out for delivery, delivered, or runs
+            into a problem. Email still gets every update. Replying STOP to any message turns these off too.
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={() => toggle(!st.optIn)} disabled={busy} style={buttonStyle}>
+              {st.optIn ? "Turn alerts off" : "Turn alerts on"}
+            </button>
+            <button type="button" onClick={() => unlink("disconnect")} disabled={busy} style={buttonGhostStyle}>
+              Disconnect
+            </button>
+          </div>
+        </>
+      ) : st.pending ? (
+        <>
+          <p style={{ margin: "0 0 12px", fontSize: 14, lineHeight: 1.5 }}>
+            Send this message to <strong>{st.pending.businessNumberDisplay}</strong> from the WhatsApp account you want
+            alerts on. We read your number from the message, so there&apos;s nothing to type.
+          </p>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              padding: "12px 14px",
+              border: "1px solid var(--border)",
+              borderRadius: 10,
+              background: "var(--bg-soft, var(--bg))",
+              marginBottom: 12,
+            }}
+          >
+            <code style={{ fontSize: 18, fontWeight: 700, letterSpacing: "0.04em" }}>{st.pending.message}</code>
+            <a
+              href={st.pending.waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}
+            >
+              Open WhatsApp
+            </a>
+          </div>
+          <p style={{ margin: "0 0 12px", color: "var(--muted)", fontSize: 13 }}>
+            Waiting for your message… this page updates by itself.{" "}
+            {minutesLeft > 0 ? `Code expires in ${minutesLeft} min.` : "Code expiring."}
+          </p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" onClick={start} disabled={busy} style={buttonGhostStyle}>
+              Get a new code
+            </button>
+            <button type="button" onClick={() => unlink("cancel")} disabled={busy} style={buttonGhostStyle}>
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p style={{ margin: "0 0 14px", color: "var(--muted)", fontSize: 14, lineHeight: 1.5 }}>
+            Get the moments that matter — picked up, out for delivery, delivered, problems — on WhatsApp as well as
+            email. Connect by sending us a short message; we read your number from it.
+          </p>
+          <button type="button" onClick={start} disabled={busy} style={buttonStyle}>
+            {busy ? "…" : "Connect WhatsApp"}
+          </button>
+        </>
+      )}
+
+      {feedback && (
+        <p style={{ margin: "12px 0 0", fontSize: 13, color: feedback.kind === "ok" ? "var(--success)" : "var(--danger)" }}>
+          {feedback.text}
+        </p>
       )}
     </section>
   );

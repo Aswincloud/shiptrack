@@ -26,6 +26,16 @@ export interface AppEnv {
   MICROSOFT_CLIENT_SECRET?: string;
   MICROSOFT_TENANT_ID?: string;
   DELHIVERY_API_TOKEN?: string;
+  // WhatsApp alerts (Meta Cloud API). All optional: unset ⇒ the feature is
+  // hidden in Settings and the poller never attempts a send. See README.
+  WHATSAPP_PHONE_NUMBER_ID?: string;
+  WHATSAPP_ACCESS_TOKEN?: string;
+  WHATSAPP_TEMPLATE_NAME?: string;
+  WHATSAPP_TEMPLATE_LANG?: string;
+  WHATSAPP_BUSINESS_NUMBER?: string;
+  WHATSAPP_APP_SECRET?: string;
+  WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string;
+  WHATSAPP_API_BASE?: string;
 }
 
 export function getEnv(): AppEnv {
