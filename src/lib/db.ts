@@ -12,6 +12,11 @@ export interface WatchRow {
   last_event_hash: string | null;
   last_polled_at: number | null;
   estimated_delivery: string | null;
+  // The watch's own WhatsApp recipient (guest WhatsApp watches). E.164 digits;
+  // set together with phone_verified_at by the webhook when the sender's
+  // "VERIFY <code>" arrives. See migrations/0015.
+  phone: string | null;
+  phone_verified_at: number | null;
   created_at: number;
   confirmed_at: number | null;
   completed_at: number | null;
@@ -58,7 +63,8 @@ export interface AdminUserView {
 // A watch with no owning account, as shown in the admin dashboard.
 export interface AdminWatchRequestView {
   id: string;
-  email: string;
+  email: string; // '' for WhatsApp-only guest watches
+  phone: string | null;
   carrier: string;
   tracking_number: string;
   label: string | null;
@@ -140,6 +146,9 @@ export const MAX_OPEN_WATCHES_PER_USER = 50;
 // back later during a flood.
 export const MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY = 5;
 export const MAX_GUEST_WATCHES_PER_HOUR = 30;
+// Same idea for WhatsApp guest watches, keyed by the verified sender number.
+// Enforced when the VERIFY message arrives, since that is when we learn it.
+export const MAX_GUEST_WATCHES_PER_PHONE_PER_DAY = 5;
 
 // How long a confirmation link (third-party or guest watch) stays valid. Shared
 // by the routes that sign the token and by the guest duplicate check / sweep
@@ -276,6 +285,139 @@ export async function expireStalePendingGuestWatches(
   return res.meta?.changes ?? 0;
 }
 
+// Guest WhatsApp watches whose link code expired before any message arrived.
+// Their TTL is the code's (minutes), not the email link's (days): nothing was
+// sent to anyone, so there is nothing to wait for. Also drops expired codes
+// whose watch was cancelled some other way (CASCADE only fires on delete).
+export async function expireUnclaimedGuestWhatsappWatches(
+  db: D1Database,
+  now: number,
+  ttlSeconds: number,
+): Promise<number> {
+  const [cancelled] = await db.batch([
+    db
+      .prepare(
+        `UPDATE watches SET status='cancelled'
+         WHERE user_id IS NULL AND status='pending' AND email = '' AND phone IS NULL AND created_at < ?`,
+      )
+      .bind(now - ttlSeconds),
+    db.prepare(`DELETE FROM watch_phone_verifications WHERE expires_at < ?`).bind(now),
+  ]);
+  return cancelled.meta?.changes ?? 0;
+}
+
+// --- Guest WhatsApp watches: link codes keyed by watch ---
+
+export interface WatchPhoneVerificationRow {
+  watch_id: string;
+  code: string;
+  expires_at: number;
+  created_at: number;
+}
+
+export async function upsertWatchPhoneVerification(
+  db: D1Database,
+  watchId: string,
+  code: string,
+  expiresAt: number,
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO watch_phone_verifications (watch_id, code, expires_at, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(watch_id) DO UPDATE SET
+         code = excluded.code, expires_at = excluded.expires_at, created_at = excluded.created_at`,
+    )
+    .bind(watchId, code, expiresAt, now)
+    .run();
+}
+
+export async function findWatchPhoneVerificationByCode(
+  db: D1Database,
+  code: string,
+  now: number,
+): Promise<WatchPhoneVerificationRow | null> {
+  const row = await db
+    .prepare(`SELECT * FROM watch_phone_verifications WHERE code = ? AND expires_at > ?`)
+    .bind(code, now)
+    .first<WatchPhoneVerificationRow>();
+  return row ?? null;
+}
+
+export async function deleteWatchPhoneVerification(db: D1Database, watchId: string): Promise<void> {
+  await db.prepare(`DELETE FROM watch_phone_verifications WHERE watch_id = ?`).bind(watchId).run();
+}
+
+/** True when a live link code — for a user OR a watch — already reads `code`. */
+export async function linkCodeInUse(db: D1Database, code: string, now: number): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM phone_verifications WHERE code = ? AND expires_at > ?)
+            + (SELECT COUNT(*) FROM watch_phone_verifications WHERE code = ? AND expires_at > ?) AS n`,
+    )
+    .bind(code, now, code, now)
+    .first<{ n: number }>();
+  return (row?.n ?? 0) > 0;
+}
+
+/**
+ * Bind the sender's number to a pending guest watch and activate it in one
+ * transaction: the inbound message is both proof of the number and the
+ * opt-in for this shipment. Returns false if the watch was no longer pending.
+ */
+export async function linkWatchPhone(db: D1Database, watchId: string, phone: string): Promise<boolean> {
+  const now = Math.floor(Date.now() / 1000);
+  const [upd] = await db.batch([
+    db
+      .prepare(
+        `UPDATE watches SET phone = ?, phone_verified_at = ?, status = 'active', confirmed_at = ?
+         WHERE id = ? AND status = 'pending'`,
+      )
+      .bind(phone, now, now, watchId),
+    db.prepare(`DELETE FROM watch_phone_verifications WHERE watch_id = ?`).bind(watchId),
+  ]);
+  return (upd.meta?.changes ?? 0) > 0;
+}
+
+export async function findActiveGuestWatchForPhone(
+  db: D1Database,
+  phone: string,
+  carrier: string,
+  trackingNumber: string,
+): Promise<WatchRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT * FROM watches
+       WHERE user_id IS NULL AND phone = ? AND carrier = ? AND tracking_number = ? AND status = 'active'
+       LIMIT 1`,
+    )
+    .bind(phone, carrier, trackingNumber)
+    .first<WatchRow>();
+  return row ?? null;
+}
+
+/** Guest watches this number has claimed since `since` (0 = ever). Cancelled/completed count. */
+export async function countGuestWatchesForPhoneSince(db: D1Database, phone: string, since: number): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM watches WHERE user_id IS NULL AND phone = ? AND phone_verified_at >= ?`)
+    .bind(phone, since)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** STOP from a number: retire every in-flight guest watch it holds. Returns how many. */
+export async function cancelGuestWatchesForPhone(db: D1Database, phone: string): Promise<number> {
+  const res = await db
+    .prepare(
+      `UPDATE watches SET status='cancelled'
+       WHERE user_id IS NULL AND phone = ? AND status IN ('pending','active')`,
+    )
+    .bind(phone)
+    .run();
+  return res.meta?.changes ?? 0;
+}
+
 // Guest requests made for one address since `since` (unix seconds). Cancelled
 // and completed rows count: they still cost the recipient an email.
 export async function countGuestWatchesForEmailSince(
@@ -312,7 +454,7 @@ export async function listWatchRequestsForAdmin(
 ): Promise<AdminWatchRequestView[]> {
   const res = await db
     .prepare(
-      `SELECT id, email, carrier, tracking_number, label, status, last_known_status,
+      `SELECT id, email, phone, carrier, tracking_number, label, status, last_known_status,
               created_at, confirmed_at, last_polled_at
        FROM watches
        WHERE user_id IS NULL

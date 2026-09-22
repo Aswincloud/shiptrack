@@ -6,6 +6,7 @@ import {
   confirmWatch,
   CONFIRM_TTL_SECONDS,
   getUserById,
+  getWatch,
   getWatchForUser,
   setWatchPendingForUser,
   updateWatchForUser,
@@ -15,8 +16,33 @@ import {
 import { readSession } from "@/lib/auth";
 import { signToken } from "@/lib/tokens";
 import { sendEmail, confirmEmail } from "@/lib/email";
+import { formatPhoneForDisplay } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
+
+// Minimal state of one watch, so the "not found yet" form can watch its guest
+// WhatsApp request flip to active after the visitor sends the code. A guest
+// watch is readable by anyone holding its id — a random UUID the requester
+// was just handed — and reveals only status and the linked number's display
+// form. An owned watch requires its owner's session.
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const env = getEnv();
+  if (!env.DB || !env.TOKEN_SECRET) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
+  const { id } = await ctx.params;
+  const w = await getWatch(env.DB, id);
+  if (!w) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (w.user_id) {
+    const sess = await readSession(env.TOKEN_SECRET, req);
+    if (!sess || sess.userId !== w.user_id) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  return NextResponse.json({
+    status: w.status,
+    channel: w.phone || !w.email ? "whatsapp" : "email",
+    phoneDisplay: w.phone ? formatPhoneForDisplay(w.phone) : null,
+  });
+}
 
 
 const PatchBody = z.object({

@@ -27,7 +27,8 @@ export interface AdminUser {
 // track page, or registered through the ADMIN_TOKEN curl flow.
 export interface AdminWatchRequest {
   id: string;
-  email: string;
+  email: string; // '' for WhatsApp-only guest watches
+  phone: string | null;
   carrier: string;
   tracking_number: string;
   label: string | null;

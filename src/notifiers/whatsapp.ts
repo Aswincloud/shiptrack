@@ -15,6 +15,16 @@ export const WHATSAPP_MILESTONES: ReadonlySet<string> = new Set([
   "returned",
 ]);
 
+/**
+ * Whether a new scan warrants a WhatsApp message. Milestones always; and the
+ * very first scan a watch ever sees, whatever its status — that is the
+ * "tell me when it appears" moment a not-found-yet watch exists for, and it
+ * is usually a plain in-transit hop.
+ */
+export function shouldNotifyWhatsapp(status: string, isFirstScan: boolean): boolean {
+  return isFirstScan || WHATSAPP_MILESTONES.has(status);
+}
+
 export const whatsappMeta: Notifier = {
   id: "whatsapp",
   name: "WhatsApp (Meta Cloud API)",

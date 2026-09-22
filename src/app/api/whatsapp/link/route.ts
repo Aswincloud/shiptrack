@@ -5,8 +5,8 @@ import { getEnv } from "@/lib/env";
 import { readSession } from "@/lib/auth";
 import {
   deletePhoneVerification,
-  findPhoneVerificationByCode,
   getPhoneVerification,
+  linkCodeInUse,
   getUserById,
   setWhatsappOptIn,
   unlinkUserPhone,
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   // Six digits from a CSPRNG; retry on the (vanishingly rare) live collision so
   // an inbound code can only ever mean one account.
   let code = generateOtp();
-  for (let i = 0; i < 5 && (await findPhoneVerificationByCode(env.DB, code, now)); i++) code = generateOtp();
+  for (let i = 0; i < 5 && (await linkCodeInUse(env.DB, code, now)); i++) code = generateOtp();
   const expiresAt = now + PHONE_LINK_TTL_SECONDS;
   await upsertPhoneVerification(env.DB, user.id, code, expiresAt);
 
