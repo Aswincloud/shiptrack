@@ -4,6 +4,7 @@ import { useState } from "react";
 import { buttonGhostStyle, cardStyle } from "../../styles";
 import type { AdminUser } from "./types";
 import { th, td } from "./tableStyles";
+import { formatPhoneForDisplay } from "@/lib/whatsapp";
 
 export function AdminSection({
   initialUsers,
@@ -109,6 +110,7 @@ export function AdminSection({
                 <th style={th}>Verified</th>
                 <th style={th}>Active</th>
                 <th style={th}>Total</th>
+                <th style={th}>WhatsApp</th>
                 <th style={th}>Created</th>
                 <th style={th}></th>
               </tr>
@@ -126,6 +128,17 @@ export function AdminSection({
                   </td>
                   <td style={td} data-label="Active">{u.watch_count}</td>
                   <td style={td} data-label="Total" title="Watches created, including delivered and cancelled">{u.watches_created}</td>
+                  <td style={{ ...td, whiteSpace: "nowrap" }} data-label="WhatsApp">
+                    {u.phone && u.phone_verified_at ? (
+                      u.whatsapp_opt_in === 1 ? (
+                        <span style={{ color: "var(--success)" }} title="Linked, alerts on">✓ {formatPhoneForDisplay(u.phone)}</span>
+                      ) : (
+                        <span style={{ color: "var(--muted)" }} title="Linked, alerts turned off">off · {formatPhoneForDisplay(u.phone)}</span>
+                      )
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>—</span>
+                    )}
+                  </td>
                   <td style={{ ...td, color: "var(--muted)", fontSize: 12 }} data-label="Created">
                     {new Date(u.created_at * 1000).toLocaleDateString()}
                   </td>
