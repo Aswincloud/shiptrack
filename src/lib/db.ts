@@ -77,6 +77,8 @@ export interface AdminWatchRequestView {
   created_at: number;
   confirmed_at: number | null;
   last_polled_at: number | null;
+  // Set when an admin hides the row from the requests list. Display-only.
+  admin_hidden_at: number | null;
 }
 
 export interface OtpRow {
@@ -468,7 +470,7 @@ export async function listWatchRequestsForAdmin(
   const res = await db
     .prepare(
       `SELECT id, email, phone, carrier, tracking_number, label, status, last_known_status,
-              created_at, confirmed_at, last_polled_at
+              created_at, confirmed_at, last_polled_at, admin_hidden_at
        FROM watches
        WHERE user_id IS NULL
        ORDER BY created_at DESC
@@ -477,6 +479,16 @@ export async function listWatchRequestsForAdmin(
     .bind(limit)
     .all<AdminWatchRequestView>();
   return res.results ?? [];
+}
+
+/** Hide or unhide a watch from the admin requests list. Display-only; never touches status. */
+export async function setWatchAdminHidden(db: D1Database, id: string, hidden: boolean): Promise<boolean> {
+  const now = Math.floor(Date.now() / 1000);
+  const res = await db
+    .prepare(`UPDATE watches SET admin_hidden_at = ? WHERE id = ?`)
+    .bind(hidden ? now : null, id)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
 }
 
 // Send a watch back to 'pending' — used when its notify address is repointed at

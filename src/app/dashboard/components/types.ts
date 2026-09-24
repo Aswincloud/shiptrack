@@ -40,6 +40,7 @@ export interface AdminWatchRequest {
   created_at: number;
   confirmed_at: number | null;
   last_polled_at: number | null;
+  admin_hidden_at: number | null;
 }
 
 export interface CarrierOption {
