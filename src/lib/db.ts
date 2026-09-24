@@ -58,6 +58,10 @@ export interface AdminUserView {
   watch_count: number;
   // Lifetime count of watches the user has created; survives completion and purge.
   watches_created: number;
+  // WhatsApp link state, straight from the users row.
+  phone: string | null;
+  phone_verified_at: number | null;
+  whatsapp_opt_in: number;
 }
 
 // A watch with no owning account, as shown in the admin dashboard.
@@ -953,6 +957,7 @@ export async function listAllUsersForAdmin(db: D1Database): Promise<AdminUserVie
   const res = await db
     .prepare(
       `SELECT u.id, u.email, u.email_verified, u.is_admin, u.created_at, u.watches_created,
+              u.phone, u.phone_verified_at, u.whatsapp_opt_in,
               COALESCE(COUNT(w.id), 0) AS watch_count
        FROM users u
        LEFT JOIN watches w ON w.user_id = u.id AND w.status = 'active'

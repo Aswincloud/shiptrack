@@ -21,6 +21,9 @@ export interface AdminUser {
   created_at: number;
   watch_count: number;
   watches_created: number;
+  phone: string | null;
+  phone_verified_at: number | null;
+  whatsapp_opt_in: number;
 }
 
 // A watch with no owning account: requested by a signed-out visitor from a
