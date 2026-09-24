@@ -1,5 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
-import { carryForwardStatus, overallStatus } from "./normalize";
+import { carryForwardStatus, overallStatus, stripTags } from "./normalize";
 
 // ST Courier (stcourier.com) publishes no developer API — no docs, no keys, no
 // portal. Their own site tracks via a two-step CodeIgniter flow that we
@@ -64,16 +64,6 @@ function mapStatus(text: string): ShipmentStatus {
   return "unknown";
 }
 
-function stripTags(s: string): string {
-  return s
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 // The summary table renders as <td>Label</td><td class="font-normal">Value</td>.
 // Labels carry ST Courier's own typos and trailing spaces ("Orgin SRC",
