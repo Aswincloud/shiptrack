@@ -31,55 +31,58 @@ export async function GET(req: NextRequest) {
   const emailEnv = { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL };
   const unsub = `${env.APP_URL.replace(/\/$/, "")}/api/watches/unsubscribe?token=sample`;
 
-  // A Map, not an object: `?type=constructor` must be "unknown_type", not a
-  // call into Object.prototype. (CodeQL js/unvalidated-dynamic-method-call.)
-  const samples = new Map<string, () => { subject: string; html: string; text: string }>();
-  samples.set(
-    "status",
-    () =>
-      statusChangeEmail({
-        carrier: "bluedart",
-        trackingNumber: "76989136991",
-        label: "Mom's parcel",
-        oldStatus: "out_for_delivery",
-        newStatus: "delivered",
-        description: "Shipment delivered to consignee",
-        location: "Puducherry",
-        timestamp: "29 May 11:01 AM",
-        unsubscribeUrl: unsub,
-      }),
-  );
-  samples.set("otp", () => otpEmail({ code: "428193", ttlMinutes: 10 }));
-  samples.set(
-    "watch",
-    () =>
-      watchCreatedEmail({
-        appUrl: env.APP_URL,
-        carrier: "shiprocket",
-        trackingNumber: "76989136991",
-        label: "Mom's parcel",
-        currentStatus: "in_transit",
-        unsubscribeUrl: unsub,
-      }),
-  );
-  samples.set("reset", () => passwordResetEmail({ resetUrl: `${env.APP_URL}/reset?token=sample`, ttlHours: 1 }));
+  // A fixed list, filtered by the request — never a lookup keyed by the
+  // request. The function that gets called is always taken from this literal
+  // array; `type` only decides which entries are included. So neither an
+  // Object.prototype name (constructor, __proto__) nor anything else the caller
+  // sends can pick a callee. (CodeQL js/unvalidated-dynamic-method-call.)
+  const samples: { type: string; render: () => { subject: string; html: string; text: string } }[] = [
+    {
+      type: "status",
+      render: () =>
+        statusChangeEmail({
+          carrier: "bluedart",
+          trackingNumber: "76989136991",
+          label: "Mom's parcel",
+          oldStatus: "out_for_delivery",
+          newStatus: "delivered",
+          description: "Shipment delivered to consignee",
+          location: "Puducherry",
+          timestamp: "29 May 11:01 AM",
+          unsubscribeUrl: unsub,
+        }),
+    },
+    { type: "otp", render: () => otpEmail({ code: "428193", ttlMinutes: 10 }) },
+    {
+      type: "watch",
+      render: () =>
+        watchCreatedEmail({
+          appUrl: env.APP_URL,
+          carrier: "shiprocket",
+          trackingNumber: "76989136991",
+          label: "Mom's parcel",
+          currentStatus: "in_transit",
+          unsubscribeUrl: unsub,
+        }),
+    },
+    { type: "reset", render: () => passwordResetEmail({ resetUrl: `${env.APP_URL}/reset?token=sample`, ttlHours: 1 }) },
+  ];
 
-  const types = type === "all" ? [...samples.keys()] : [type];
+  const known = samples.map((s) => s.type);
+  const requested = type === "all" ? known : [type];
   const sent: string[] = [];
-  const failed: { type: string; error: string }[] = [];
+  const failed: { type: string; error: string }[] = requested
+    .filter((t) => !known.includes(t))
+    .map((t) => ({ type: t, error: "unknown_type" }));
 
-  for (const t of types) {
-    const factory = samples.get(t);
-    if (!factory) {
-      failed.push({ type: t, error: "unknown_type" });
-      continue;
-    }
-    const tpl = factory();
+  for (const sample of samples) {
+    if (!requested.includes(sample.type)) continue;
+    const tpl = sample.render();
     try {
       await sendEmail(emailEnv, { to, subject: `[TEST] ${tpl.subject}`, html: tpl.html, text: tpl.text });
-      sent.push(t);
+      sent.push(sample.type);
     } catch (err) {
-      failed.push({ type: t, error: err instanceof Error ? err.message : String(err) });
+      failed.push({ type: sample.type, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
