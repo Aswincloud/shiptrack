@@ -31,8 +31,12 @@ export async function GET(req: NextRequest) {
   const emailEnv = { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL };
   const unsub = `${env.APP_URL.replace(/\/$/, "")}/api/watches/unsubscribe?token=sample`;
 
-  const samples: Record<string, () => { subject: string; html: string; text: string }> = {
-    status: () =>
+  // A Map, not an object: `?type=constructor` must be "unknown_type", not a
+  // call into Object.prototype. (CodeQL js/unvalidated-dynamic-method-call.)
+  const samples = new Map<string, () => { subject: string; html: string; text: string }>();
+  samples.set(
+    "status",
+    () =>
       statusChangeEmail({
         carrier: "bluedart",
         trackingNumber: "76989136991",
@@ -44,8 +48,11 @@ export async function GET(req: NextRequest) {
         timestamp: "29 May 11:01 AM",
         unsubscribeUrl: unsub,
       }),
-    otp: () => otpEmail({ code: "428193", ttlMinutes: 10 }),
-    watch: () =>
+  );
+  samples.set("otp", () => otpEmail({ code: "428193", ttlMinutes: 10 }));
+  samples.set(
+    "watch",
+    () =>
       watchCreatedEmail({
         appUrl: env.APP_URL,
         carrier: "shiprocket",
@@ -54,15 +61,15 @@ export async function GET(req: NextRequest) {
         currentStatus: "in_transit",
         unsubscribeUrl: unsub,
       }),
-    reset: () => passwordResetEmail({ resetUrl: `${env.APP_URL}/reset?token=sample`, ttlHours: 1 }),
-  };
+  );
+  samples.set("reset", () => passwordResetEmail({ resetUrl: `${env.APP_URL}/reset?token=sample`, ttlHours: 1 }));
 
-  const types = type === "all" ? Object.keys(samples) : [type];
+  const types = type === "all" ? [...samples.keys()] : [type];
   const sent: string[] = [];
   const failed: { type: string; error: string }[] = [];
 
   for (const t of types) {
-    const factory = samples[t];
+    const factory = samples.get(t);
     if (!factory) {
       failed.push({ type: t, error: "unknown_type" });
       continue;

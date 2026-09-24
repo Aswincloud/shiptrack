@@ -39,3 +39,38 @@ export function overallStatus(
   }
   return "unknown";
 }
+
+// Named + numeric entities, decoded in ONE pass. Chaining replace() calls
+// (first &amp; -> &, then &#39; -> ') double-unescapes: the literal text
+// "&amp;#39;" in a page means &#39; to the reader, but a second pass turned it
+// into an apostrophe. A single regex with a callback never re-scans its own
+// output, so &amp;#39; -> &#39; and stops there. (CodeQL js/double-escaping.)
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: " ",
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+};
+
+export function decodeEntities(s: string): string {
+  return s.replace(/&(?:([a-z]+)|#(\d+)|#x([0-9a-f]+));/gi, (m, name?: string, dec?: string, hex?: string) => {
+    if (name) return NAMED_ENTITIES[name.toLowerCase()] ?? m;
+    const cp = dec ? parseInt(dec, 10) : parseInt(hex!, 16);
+    if (!Number.isFinite(cp) || cp <= 0 || cp > 0x10ffff) return m;
+    try {
+      return String.fromCodePoint(cp);
+    } catch {
+      return m;
+    }
+  });
+}
+
+/**
+ * Drop tags, decode entities, collapse whitespace. Shared by every HTML-scraping
+ * carrier so they can't drift into subtly different (or unsafe) decoders.
+ */
+export function stripTags(html: string): string {
+  return decodeEntities(html.replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim();
+}

@@ -91,7 +91,9 @@ export async function POST(req: NextRequest) {
       await handleInbound(env, m);
     } catch (err) {
       // Never let one message fail the batch — Meta would redeliver all of them.
-      console.error(`whatsapp inbound ${m.id} from ${m.from} failed:`, err instanceof Error ? err.message : err);
+      // Constant message, user-controlled values as fields: a "%s" in a sender's
+      // data must never reach console's format string. (CodeQL js/tainted-format-string.)
+      console.error("whatsapp inbound failed", { id: m.id, from: m.from, error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -215,6 +217,6 @@ async function reply(env: AppEnv, to: string, body: string): Promise<void> {
   try {
     await sendText(env, to, body);
   } catch (err) {
-    console.warn(`whatsapp reply to ${to} failed:`, err instanceof Error ? err.message : err);
+    console.warn("whatsapp reply failed", { to, error: err instanceof Error ? err.message : String(err) });
   }
 }

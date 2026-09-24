@@ -1,5 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
-import { carryForwardStatus, overallStatus } from "./normalize";
+import { carryForwardStatus, overallStatus, stripTags } from "./normalize";
 
 // Blue Dart's commercial "Tracking API" requires customer credentials (LoginID
 // and a tracking-API License Key) issued by a Blue Dart account manager. They
@@ -58,16 +58,6 @@ function mapStatus(text: string): ShipmentStatus {
   return "unknown";
 }
 
-function stripTags(s: string): string {
-  return s
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 // Pull the value cell next to a <th> whose text matches the given label.
 function fieldByLabel(html: string, label: string): string | undefined {

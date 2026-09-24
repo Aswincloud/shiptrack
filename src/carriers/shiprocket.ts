@@ -1,5 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
-import { carryForwardStatus, overallStatus } from "./normalize";
+import { carryForwardStatus, overallStatus, stripTags } from "./normalize";
 
 // Shiprocket is a shipping aggregator. Its public tracking page resolves any
 // AWB to its underlying courier (Blue Dart, Delhivery, Ekart, XpressBees, …)
@@ -34,16 +34,6 @@ function mapStatus(text: string): ShipmentStatus {
   return "unknown";
 }
 
-function stripTags(s: string): string {
-  return s
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#0?39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function firstGroup(html: string, re: RegExp): string | undefined {
   const m = html.match(re);
