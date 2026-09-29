@@ -24,6 +24,7 @@ const CARRIER_LABELS: Record<string, string> = {
   stcourier: "ST Courier",
   tpc: "Professional Couriers",
   amazon: "Amazon Shipping",
+  ekart: "Ekart (Flipkart)",
 };
 function labelForCarrier(id: string): string {
   return CARRIER_LABELS[id] ?? id;
@@ -222,7 +223,7 @@ export default function Home() {
                 name: "ShipTrack",
                 url: "https://shiptrack.aswincloud.com",
                 description:
-                  "Free, open-source shipment tracking for Blue Dart, Delhivery, Amazon Shipping, ST Courier, TPC and Shiprocket with optional email alerts on status changes.",
+                  "Free, open-source shipment tracking for Blue Dart, Delhivery, Amazon Shipping, Ekart, ST Courier, TPC and Shiprocket with optional email alerts on status changes.",
                 applicationCategory: "BusinessApplication",
                 operatingSystem: "Any",
                 offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
@@ -275,7 +276,7 @@ export default function Home() {
         </h1>
         <p style={{ color: "var(--muted)", margin: 0, fontSize: 16, maxWidth: 480, marginInline: "auto" }}>
           Paste a tracking or AWB number from Blue Dart, Delhivery, Amazon
-          Shipping, ST Courier, TPC or Shiprocket to see live status, then opt
+          Shipping, Ekart, ST Courier, TPC or Shiprocket to see live status, then opt
           in to email alerts when it changes.
         </p>
       </header>
@@ -305,6 +306,7 @@ export default function Home() {
           <option value="stcourier">ST Courier</option>
           <option value="tpc">Professional Couriers (TPC)</option>
           <option value="amazon">Amazon Shipping</option>
+          <option value="ekart">Ekart (Flipkart)</option>
         </select>
         <input
           value={tracking}
