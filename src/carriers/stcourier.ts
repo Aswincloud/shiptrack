@@ -87,31 +87,41 @@ function brLines(html: string): string[] {
     .filter((l) => l.length > 0);
 }
 
-// Each scan is a `tl04` block holding, in document order: a date/time cell, an
-// icon cell (strips to empty), and a description cell. Within a cell, <br>
-// separates "Sep 03, 2026" / "10:49 PM" and "<description>" / "<location>".
+// ST Courier randomises its CSS class names per request (seen: tl04, tl29,
+// CRmNk1L5, 57IK82Wq...), so nothing class-based is a stable anchor — an earlier
+// version split on `tl04` and silently returned zero events once it changed.
+// Anchor on structure instead: the timeline follows the "Status of AWB No."
+// heading, and each scan is a leaf <div> whose first line is a date
+// ("Sep 29, 2026<br>09:44 AM") followed by a leaf <div> holding the activity
+// and route ("Processed & Forwarded…<br>Pondicherry hub, TN -to- …").
+const SCAN_DATE_RE = /^[A-Z][a-z]{2,8}\.?\s+\d{1,2},\s+\d{4}$/;
+
 function parseScans(html: string): TrackingEvent[] {
-  const blocks = html.split(/class="[^"]*\btl04\b/i).slice(1);
+  const start = html.search(/Status of AWB No\./i);
+  if (start < 0) return [];
+  let region = html.slice(start);
+  const stop = region.search(/<\/section>|id="complaintModal/i);
+  if (stop > 0) region = region.slice(0, stop);
+
+  // Leaf divs only (no nested <div>), in document order.
+  const cells = Array.from(region.matchAll(/<div[^>]*>((?:(?!<div)[\s\S])*?)<\/div>/gi))
+    .map((m) => m[1])
+    .filter((c) => stripTags(c).length > 0);
+
   const events: TrackingEvent[] = [];
-
-  for (const block of blocks) {
-    // Leaf divs only (no nested <div>), so we get the content cells directly.
-    const cells = Array.from(block.matchAll(/<div[^>]*>((?:(?!<div)[\s\S])*?)<\/div>/gi))
-      .map((m) => m[1])
-      .filter((c) => stripTags(c).length > 0);
-    if (cells.length < 2) continue;
-
-    const when = brLines(cells[0]);
-    const what = brLines(cells[1]);
+  for (let i = 0; i < cells.length - 1; i++) {
+    const when = brLines(cells[i]);
+    if (!when[0] || !SCAN_DATE_RE.test(when[0])) continue;
+    const what = brLines(cells[i + 1]);
     const description = what[0];
-    if (!description) continue;
-
+    if (!description || SCAN_DATE_RE.test(description)) continue;
     events.push({
       timestamp: when.join(" ").trim(),
       status: mapStatus(description),
       location: what[1] || undefined,
       description,
     });
+    i++; // consumed the description cell
   }
 
   // ST Courier's render order isn't documented and a single-scan shipment can't
