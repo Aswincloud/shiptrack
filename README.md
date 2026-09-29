@@ -9,6 +9,7 @@ Currently supports:
 - **ST Courier** (India)
 - **The Professional Couriers** (India)
 - **Amazon Shipping** (India)
+- **Ekart** (India — Flipkart's courier)
 - **Shiprocket** (couriers shipped via Shiprocket)
 
 More carriers coming — contributions welcome.
@@ -122,6 +123,26 @@ not used; it needs seller credentials and only covers shipments you purchased.
 Expected delivery is taken from `summary.metadata.expectedDeliveryDate` when
 present. Destination is omitted on the anonymous tracker (addresses are null
 until the recipient signs in).
+
+### Ekart (Flipkart)
+
+No credentials required. Ekart's public tracking page is a React SPA that
+reads one JSON endpoint guarded by a CSRF check, so the carrier replays the
+browser's two steps:
+
+1. `GET https://www.ekartlogistics.com/ekartlogistics-web/shipmenttrack/<ID>`,
+   which returns the HTML shell with a `<meta name="csrf-token">` and the
+   `session` / `session.sig` cookies.
+2. `POST https://www.ekartlogistics.com/ekartlogistics-web-routes-api/ekartlogistics-web-proxy/trackings/v2`
+   with `{"tracking_ids":"<ID>"}`, the token in a `csrf-token` header and both
+   cookies.
+
+The reply is keyed by tracking ID and carries source/destination city, an
+expected-delivery epoch and the scan list. An unknown ID is HTTP 200 with `{}`.
+Scans are kept in Ekart's own (oldest-first) order rather than sorted by time,
+because their timestamps are not always monotonic.
+
+IDs are typically four letters and ten digits (`FMPP…`, `FMPC…`, `NAHC…`).
 
 ### Delhivery
 

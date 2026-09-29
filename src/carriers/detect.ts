@@ -11,6 +11,8 @@
 // accepts almost anything and only resolves shipments booked through it.
 
 const CANDIDATES: { id: string; pattern: RegExp; skipInAuto?: boolean }[] = [
+  // Four letters + ten digits: Ekart / Flipkart (e.g. "FMPP4307095480").
+  { id: "ekart", pattern: /^[A-Z]{4}[0-9]{10}$/i },
   // Letter prefix + digits: TPC consignment numbers (e.g. "CHE123456789").
   { id: "tpc", pattern: /^[A-Z]{2,5}[0-9]{4,15}$/i },
   // Digit-only shapes, most-specific length ranges first.

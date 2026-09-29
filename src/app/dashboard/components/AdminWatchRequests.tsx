@@ -15,6 +15,7 @@ const CARRIER_LABELS: Record<string, string> = {
   stcourier: "ST Courier",
   tpc: "Professional Couriers",
   amazon: "Amazon Shipping",
+  ekart: "Ekart (Flipkart)",
 };
 
 // How a watch request is doing, in the operator's terms rather than the
