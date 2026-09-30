@@ -1,3 +1,4 @@
+import { formatEta, formatEventTime } from "./dates";
 export interface EmailEnv {
   RESEND_API_KEY: string;
   RESEND_FROM: string;
@@ -165,9 +166,10 @@ function shipmentCard(args: {
         args.label,
       )}</td></tr>`
     : "";
-  const etaRow = args.estimatedDelivery
+  const etaText = formatEta(args.estimatedDelivery);
+  const etaRow = etaText
     ? `<tr><td style="padding:2px 0;color:#94a3b8;font-size:13px;">Expected delivery</td><td style="padding:2px 0;color:#0f172a;font-size:13px;font-weight:600;text-align:right;">${escapeHtml(
-        args.estimatedDelivery,
+        etaText,
       )}</td></tr>`
     : "";
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;margin:4px 0 8px;">
@@ -226,7 +228,7 @@ export function statusChangeEmail(args: {
 }): { subject: string; html: string; text: string } {
   const ref = args.label ?? args.trackingNumber;
   const subject = `${ref}: ${humanStatus(args.newStatus)}`;
-  const meta = [args.timestamp, args.location].filter(Boolean).join(" · ");
+  const meta = [formatEventTime(args.timestamp), args.location].filter(Boolean).join(" · ");
   const { fg } = statusColors(args.newStatus);
 
   const html = shell({
@@ -252,7 +254,8 @@ export function statusChangeEmail(args: {
       </p>
     `,
   });
-  const eta = args.estimatedDelivery ? `\nExpected delivery: ${args.estimatedDelivery}` : "";
+  const etaLine = formatEta(args.estimatedDelivery);
+  const eta = etaLine ? `\nExpected delivery: ${etaLine}` : "";
   const text = `${humanStatus(args.newStatus)}: ${args.description}${meta ? ` (${meta})` : ""}${eta}\nUnsubscribe: ${args.unsubscribeUrl}`;
   return { subject, html, text };
 }

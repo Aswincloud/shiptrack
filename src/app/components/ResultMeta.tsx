@@ -1,5 +1,5 @@
 import type { TrackingEvent } from "@/carriers/types";
-import { displayCarrierDate } from "@/lib/dates";
+import { displayCarrierDate, formatEta } from "@/lib/dates";
 import { TimeAgo } from "./TimeAgo";
 
 // The two lines under the waybill: when the newest scan happened (normalised,
@@ -8,11 +8,8 @@ import { TimeAgo } from "./TimeAgo";
 export function ResultMeta({ events, estimatedDelivery }: { events: TrackingEvent[]; estimatedDelivery?: string }) {
   const latest = events[events.length - 1];
   const when = latest ? displayCarrierDate(latest.timestamp) : null;
-  const eta = displayCarrierDate(estimatedDelivery);
-  const etaText = eta.date
-    ? // ETAs are dates, sometimes with a meaningless midnight/2:30 PM time; show the day only.
-      eta.text.replace(/,\s[^,]*IST$/, "")
-    : eta.text;
+  // ETAs are days, sometimes carrying a meaningless midnight / end-of-day time.
+  const etaText = formatEta(estimatedDelivery);
 
   return (
     <>

@@ -121,3 +121,24 @@ export function displayCarrierDate(raw: string | undefined | null): { text: stri
   const date = parseCarrierDate(raw);
   return { text: date ? formatCarrierDate(date) : (raw ?? "").trim(), date };
 }
+
+/**
+ * A scan time as users should read it, whatever format the carrier sent:
+ * "29 Sep 2026, 9:20 am IST". Unparseable text ("just now") passes through.
+ * Every place that shows a timestamp outside the React timeline — emails,
+ * WhatsApp — goes through this, so an ISO string (Ekart) or a carrier's own
+ * format never reaches a person raw.
+ */
+export function formatEventTime(raw: string | undefined | null): string {
+  return displayCarrierDate(raw).text;
+}
+
+/**
+ * An expected-delivery date. Carriers mean a day, not an instant — Blue Dart
+ * sends "26 Sep 2026" (parses to midnight), Ekart an end-of-day epoch — so show
+ * the date only. Text we can't parse ("14 Sep 2026, Afternoon") passes through.
+ */
+export function formatEta(raw: string | undefined | null): string {
+  const d = parseCarrierDate(raw);
+  return d ? formatCarrierDate(d, false) : (raw ?? "").trim();
+}

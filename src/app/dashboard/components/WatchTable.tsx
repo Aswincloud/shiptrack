@@ -5,6 +5,7 @@ import { inputStyle, buttonStyle, buttonGhostStyle, cardStyle, statusPillStyle, 
 import { IntervalPicker } from "../../components/IntervalPicker";
 import type { ClientWatch } from "./types";
 import { th, td, trStyle } from "./tableStyles";
+import { formatEta } from "@/lib/dates";
 
 // Delivered/returned watches are auto-removed this long after completion.
 const PURGE_GRACE_DAYS = 7;
@@ -185,7 +186,7 @@ function WatchRow({
         <span style={statusPillStyle(pillStatus)}>{statusText}</span>
         {!isFinished && w.estimatedDelivery && (
           <div style={{ color: "var(--muted)", fontSize: 11, marginTop: 3 }}>
-            expected {w.estimatedDelivery}
+            expected {formatEta(w.estimatedDelivery)}
           </div>
         )}
         {purgeDaysLeft !== null && (
