@@ -1,6 +1,7 @@
 import { Notifier, NotifierError } from "./types";
 import { getCarrier } from "@/carriers/registry";
 import { humanStatus } from "@/lib/status";
+import { formatEventTime } from "@/lib/dates";
 import { sendTrackingUpdate, whatsappConfigured, WhatsAppError } from "@/lib/whatsapp";
 
 // Statuses worth a WhatsApp message. Email gets every new scan; WhatsApp is
@@ -48,7 +49,7 @@ export const whatsappMeta: Notifier = {
         // The template prefixes {{3}} with 📍; when the scan has no location the
         // carrier name is the most useful thing to put there.
         location: payload.event.location || carrierName,
-        time: payload.event.timestamp || "just now",
+        time: formatEventTime(payload.event.timestamp) || "just now",
         status: statusText,
       });
     } catch (err) {
