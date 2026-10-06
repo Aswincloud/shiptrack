@@ -181,11 +181,7 @@ export function WatchRequestForm({
             Want to know when it appears?
           </div>
           <div style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
-            Freshly-booked shipments can take a few hours to show up at {carrierName}. We&rsquo;ll check
-            this number every hour for the next couple of days — less often after that — and tell you as
-            soon as it appears, then on every change after.{" "}
-            {showWhatsApp ? "Email gets every update; WhatsApp gets the moments that matter. " : ""}
-            One-click unsubscribe in every email{showWhatsApp ? ", reply STOP on WhatsApp" : ""}.
+            We&rsquo;ll keep checking and let you know{showWhatsApp ? " by email or WhatsApp" : " by email"}.
           </div>
         </>
       )}

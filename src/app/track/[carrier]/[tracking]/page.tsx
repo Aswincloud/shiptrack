@@ -104,9 +104,17 @@ export default async function PublicTrackPage({ params }: { params: Promise<Para
   return (
     <Shell>
       {errorMsg && (
-        <div style={{ ...cardStyle, borderColor: "var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger)", display: "flex", gap: 10, alignItems: "center" }}>
-          <span aria-hidden style={{ fontSize: 16 }}>⚠</span>
-          <span style={{ fontSize: 14, fontWeight: 500 }}>{errorMsg}</span>
+        <div style={{ ...cardStyle, borderColor: "var(--danger-border)", background: "var(--danger-bg)", color: "var(--danger)", display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <span aria-hidden style={{ fontSize: 16, lineHeight: 1.4 }}>⚠</span>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>{errorMsg}</div>
+            {error === "not_found" && (
+              <div style={{ fontSize: 13, marginTop: 4, color: "var(--fg-soft, var(--muted))" }}>
+                Freshly booked shipments can take a few hours to show up at {carrier.name}. Please check back
+                later.
+              </div>
+            )}
+          </div>
         </div>
       )}
 
