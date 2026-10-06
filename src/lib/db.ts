@@ -176,6 +176,11 @@ export const PHONE_OTP_RESEND_COOLDOWN_SECONDS = 60;
 // Each send is a billed message to a number nobody has proved they hold yet.
 export const MAX_PHONE_OTP_SENDS_PER_USER_PER_DAY = 5;
 export const MAX_PHONE_OTP_SENDS_PER_PHONE_PER_DAY = 5;
+// Guest (signed-out) code sends: a billed message triggered by an anonymous
+// visitor, so tighter per-IP and a site-wide hourly ceiling on top of the
+// per-number limit above.
+export const MAX_GUEST_OTP_SENDS_PER_IP_PER_DAY = 5;
+export const MAX_GUEST_OTP_SENDS_PER_HOUR = 30;
 
 export async function createWatch(db: D1Database, w: NewWatch): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
@@ -874,6 +879,87 @@ export async function countPhoneOtpSendsForUserSince(db: D1Database, userId: str
   return row?.n ?? 0;
 }
 
+export async function countAllPhoneOtpSendsSince(db: D1Database, since: number, prefix: string): Promise<number> {
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM phone_otp_sends WHERE user_id LIKE ? AND created_at >= ?`)
+    .bind(`${prefix}%`, since)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+// --- Guest WhatsApp one-time codes (migration 0018) ---
+
+export interface GuestPhoneOtpRow {
+  id: string;
+  phone: string;
+  carrier: string;
+  tracking_number: string;
+  label: string | null;
+  code_hash: string;
+  expires_at: number;
+  attempts: number;
+  created_at: number;
+}
+
+export async function getGuestPhoneOtp(db: D1Database, id: string): Promise<GuestPhoneOtpRow | null> {
+  const row = await db.prepare(`SELECT * FROM guest_phone_otp_codes WHERE id = ?`).bind(id).first<GuestPhoneOtpRow>();
+  return row ?? null;
+}
+
+export async function findGuestPhoneOtp(
+  db: D1Database,
+  phone: string,
+  carrier: string,
+  trackingNumber: string,
+): Promise<GuestPhoneOtpRow | null> {
+  const row = await db
+    .prepare(
+      `SELECT * FROM guest_phone_otp_codes WHERE phone = ? AND carrier = ? AND tracking_number = ?
+       ORDER BY created_at DESC LIMIT 1`,
+    )
+    .bind(phone, carrier, trackingNumber)
+    .first<GuestPhoneOtpRow>();
+  return row ?? null;
+}
+
+export async function insertGuestPhoneOtp(db: D1Database, r: Omit<GuestPhoneOtpRow, "attempts" | "created_at">): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db.batch([
+    db
+      .prepare(`DELETE FROM guest_phone_otp_codes WHERE phone = ? AND carrier = ? AND tracking_number = ?`)
+      .bind(r.phone, r.carrier, r.tracking_number),
+    db
+      .prepare(
+        `INSERT INTO guest_phone_otp_codes (id, phone, carrier, tracking_number, label, code_hash, expires_at, attempts, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+      )
+      .bind(r.id, r.phone, r.carrier, r.tracking_number, r.label, r.code_hash, r.expires_at, now),
+  ]);
+}
+
+export async function incrementGuestPhoneOtpAttempts(db: D1Database, id: string): Promise<void> {
+  await db.prepare(`UPDATE guest_phone_otp_codes SET attempts = attempts + 1 WHERE id = ?`).bind(id).run();
+}
+
+export async function deleteGuestPhoneOtp(db: D1Database, id: string): Promise<void> {
+  await db.prepare(`DELETE FROM guest_phone_otp_codes WHERE id = ?`).bind(id).run();
+}
+
+/** Create an active guest watch delivering to a verified WhatsApp number. */
+export async function createVerifiedGuestWhatsappWatch(
+  db: D1Database,
+  w: { id: string; phone: string; carrier: string; trackingNumber: string; label: string | null },
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  await db
+    .prepare(
+      `INSERT INTO watches (id, user_id, email, phone, phone_verified_at, carrier, tracking_number, label, status, created_at, confirmed_at, poll_interval_seconds)
+       VALUES (?, NULL, '', ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
+    )
+    .bind(w.id, w.phone, now, w.carrier, w.trackingNumber, w.label, now, now, DEFAULT_POLL_INTERVAL_SECONDS)
+    .run();
+}
+
 export async function countPhoneOtpSendsForPhoneSince(db: D1Database, phone: string, since: number): Promise<number> {
   const row = await db
     .prepare(`SELECT COUNT(*) AS n FROM phone_otp_sends WHERE phone = ? AND created_at >= ?`)
@@ -886,6 +972,7 @@ export async function countPhoneOtpSendsForPhoneSince(db: D1Database, phone: str
 export async function purgeExpiredPhoneOtps(db: D1Database, now: number): Promise<void> {
   await db.batch([
     db.prepare(`DELETE FROM phone_otp_codes WHERE expires_at < ?`).bind(now),
+    db.prepare(`DELETE FROM guest_phone_otp_codes WHERE expires_at < ?`).bind(now),
     db.prepare(`DELETE FROM phone_otp_sends WHERE created_at < ?`).bind(now - 24 * 60 * 60),
   ]);
 }

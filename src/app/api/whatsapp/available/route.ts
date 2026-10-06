@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEnv } from "@/lib/env";
-import { whatsappLinkingConfigured } from "@/lib/whatsapp";
+import { whatsappOtpConfigured } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -8,5 +8,5 @@ export const dynamic = "force-dynamic";
 // nothing but a boolean.
 export async function GET() {
   const env = getEnv();
-  return NextResponse.json({ available: whatsappLinkingConfigured(env) });
+  return NextResponse.json({ available: whatsappOtpConfigured(env) });
 }
