@@ -73,6 +73,26 @@ export function AdminWatchRequests({ initialRequests }: { initialRequests: Admin
     }
   }
 
+  async function cancel(r: AdminWatchRequest) {
+    const who = r.email || (r.phone ? `WhatsApp ${formatPhoneForDisplay(r.phone)}` : "this request");
+    if (!confirm(`Cancel ${r.tracking_number}? ${who} will stop getting updates. This can't be undone.`)) return;
+    setBusyId(r.id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/watches/${encodeURIComponent(r.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cancel: true }),
+      });
+      if (!res.ok) throw new Error("failed");
+      setRequests((rs) => rs.map((x) => (x.id === r.id ? { ...x, status: "cancelled" } : x)));
+    } catch {
+      setError("Couldn't cancel that request.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   const visible = requests.filter((r) => !r.admin_hidden_at);
   const hidden = requests.filter((r) => r.admin_hidden_at);
   const awaiting = visible.filter((r) => r.status === "pending").length;
@@ -108,7 +128,7 @@ export function AdminWatchRequests({ initialRequests }: { initialRequests: Admin
           Every request is hidden. Expand the list below to see them.
         </div>
       ) : (
-        <RequestsTable rows={visible} busyId={busyId} action="hide" onAction={(id) => setHidden(id, true)} />
+        <RequestsTable rows={visible} busyId={busyId} action="hide" onAction={(id) => setHidden(id, true)} onCancel={cancel} />
       )}
 
       {hidden.length > 0 && (
@@ -136,9 +156,9 @@ export function AdminWatchRequests({ initialRequests }: { initialRequests: Admin
           {showHidden && (
             <div style={{ marginTop: 10 }}>
               <div style={{ color: "var(--muted)", fontSize: 12, marginBottom: 8 }}>
-                Hidden from this list only. A confirmed request here is still polled and still alerts its recipient.
+                Hidden from this list only. A confirmed request here is still polled and still alerts its recipient; use Cancel to stop it.
               </div>
-              <RequestsTable rows={hidden} busyId={busyId} action="unhide" onAction={(id) => setHidden(id, false)} />
+              <RequestsTable rows={hidden} busyId={busyId} action="unhide" onAction={(id) => setHidden(id, false)} onCancel={cancel} />
             </div>
           )}
         </div>
@@ -154,11 +174,13 @@ function RequestsTable({
   busyId,
   action,
   onAction,
+  onCancel,
 }: {
   rows: AdminWatchRequest[];
   busyId: string | null;
   action: "hide" | "unhide";
   onAction: (id: string) => void;
+  onCancel: (r: AdminWatchRequest) => void;
 }) {
   return (
     <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
@@ -215,6 +237,17 @@ function RequestsTable({
                     {new Date(r.created_at * 1000).toLocaleString()}
                   </td>
                   <td style={{ ...td, textAlign: "right", whiteSpace: "nowrap" }}>
+                    {(r.status === "active" || r.status === "pending") && (
+                      <button
+                        type="button"
+                        onClick={() => onCancel(r)}
+                        disabled={busyId === r.id}
+                        title="Stop polling and alerts for this request"
+                        style={{ ...buttonGhostStyle, padding: "6px 10px", fontSize: 12, marginRight: 4, color: "var(--danger)" }}
+                      >
+                        Cancel
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onAction(r.id)}
