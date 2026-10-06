@@ -165,6 +165,16 @@ export default async function PublicTrackPage({ params }: { params: Promise<Para
         </div>
       )}
 
+      {/* Found and still moving: offer alerts here too, not just on the home
+          page. Same form as the not-found case (email confirm or WhatsApp
+          code for guests; signed-in users' own address activates directly).
+          Nothing to watch once it's delivered or returned. */}
+      {result && result.status !== "delivered" && result.status !== "returned" && (
+        <div style={{ ...cardStyle, marginTop: 16 }}>
+          <WatchRequestForm carrier={carrierId} carrierName={carrier.name} trackingNumber={tracking} mode="changes" />
+        </div>
+      )}
+
       <div style={{ marginTop: 24, textAlign: "center" }}>
         <Link href="/" style={{ ...buttonStyle, textDecoration: "none", display: "inline-block" }}>
           Track another shipment

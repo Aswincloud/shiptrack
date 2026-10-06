@@ -27,6 +27,7 @@ export function WatchRequestForm({
   carrierName,
   trackingNumber,
   embedded = false,
+  mode = "appear",
 }: {
   carrier: string;
   carrierName: string;
@@ -34,6 +35,9 @@ export function WatchRequestForm({
   // Host card already explains what this is (the home page's "not in their
   // system yet" panel), so drop our own heading and blurb.
   embedded?: boolean;
+  // "appear": the carrier doesn't know the number yet. "changes": it's already
+  // moving and the visitor wants to hear about the next scans.
+  mode?: "appear" | "changes";
 }) {
   const [channel, setChannel] = useState<Channel>("email");
   const [waAvailable, setWaAvailable] = useState(false);
@@ -144,7 +148,7 @@ export function WatchRequestForm({
       setLabel("");
       setStatus({
         kind: "ok",
-        msg: `Done. We'll message ${body.phoneDisplay} on WhatsApp when ${trackingNumber} appears, then at each milestone. Reply STOP any time.`,
+        msg: `Done. We'll message ${body.phoneDisplay} on WhatsApp ${mode === "changes" ? `at each milestone for ${trackingNumber}` : `when ${trackingNumber} appears, then at each milestone`}. Reply STOP any time.`,
       });
     } catch (err) {
       setStatus({ kind: "err", msg: err instanceof Error ? err.message : "Network error" });
@@ -160,10 +164,10 @@ export function WatchRequestForm({
       {!embedded && (
         <>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
-            Want to know when it appears?
+            {mode === "changes" ? "Get notified when this changes" : "Want to know when it appears?"}
           </div>
           <div style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
-            We&rsquo;ll keep checking and let you know{showWhatsApp ? " by email or WhatsApp" : " by email"}.
+            {mode === "changes" ? "We'll check this shipment and tell you about each update" : "We’ll keep checking and let you know"}{showWhatsApp ? " by email or WhatsApp" : " by email"}.
           </div>
         </>
       )}
