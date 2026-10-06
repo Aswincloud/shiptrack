@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { inputStyle, buttonStyle, buttonGhostStyle } from "@/app/styles";
+import { formatPhoneForDisplay } from "@/lib/whatsapp";
 
 interface Me {
   userId: string;
   email: string;
+  whatsapp?: { phone: string | null; verified: boolean; optIn: boolean };
 }
 
 type Status = { kind: "ok" | "err"; msg: string };
@@ -42,6 +45,9 @@ export function WatchRequestForm({
   const [channel, setChannel] = useState<Channel>("email");
   const [waAvailable, setWaAvailable] = useState(false);
   const [signedIn, setSignedIn] = useState(false);
+  // Signed-in users' watches also reach the WhatsApp number linked in
+  // Settings, so their form shows that instead of a WhatsApp tab.
+  const [myWhatsapp, setMyWhatsapp] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [label, setLabel] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -62,6 +68,8 @@ export function WatchRequestForm({
         if (b?.email) {
           setSignedIn(true);
           setEmail((e) => e || b.email);
+          const wa = b.whatsapp;
+          if (wa?.phone && wa.verified && wa.optIn) setMyWhatsapp(formatPhoneForDisplay(wa.phone));
         }
       })
       .catch(() => {});
@@ -167,7 +175,22 @@ export function WatchRequestForm({
             {mode === "changes" ? "Get notified when this changes" : "Want to know when it appears?"}
           </div>
           <div style={{ color: "var(--muted)", fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
-            {mode === "changes" ? "We'll check this shipment and tell you about each update" : "We’ll keep checking and let you know"}{showWhatsApp ? " by email or WhatsApp" : " by email"}.
+            {mode === "changes" ? "We'll check this shipment and tell you about each update" : "We’ll keep checking and let you know"}
+            {signedIn ? (
+              myWhatsapp ? (
+                <> by email, and on WhatsApp at {myWhatsapp} for the main milestones.</>
+              ) : waAvailable ? (
+                <>
+                  {" "}by email. Want WhatsApp too? <Link href="/settings">Add your number in Settings</Link>.
+                </>
+              ) : (
+                " by email."
+              )
+            ) : showWhatsApp ? (
+              " by email or WhatsApp."
+            ) : (
+              " by email."
+            )}
           </div>
         </>
       )}
