@@ -26,6 +26,18 @@ export function shouldNotifyWhatsapp(status: string, isFirstScan: boolean): bool
   return isFirstScan || WHATSAPP_MILESTONES.has(status);
 }
 
+// Header text per milestone (only used when the template has a header
+// parameter). Phrased as the news itself, since it's what the lock-screen
+// preview shows.
+const HEADLINES: Record<string, string> = {
+  picked_up: "Picked up",
+  in_transit: "In transit",
+  out_for_delivery: "Out for delivery",
+  delivered: "Delivered",
+  exception: "Delivery issue",
+  returned: "Returned to sender",
+};
+
 export const whatsappMeta: Notifier = {
   id: "whatsapp",
   name: "WhatsApp (Meta Cloud API)",
@@ -51,6 +63,7 @@ export const whatsappMeta: Notifier = {
         location: payload.event.location || carrierName,
         time: formatEventTime(payload.event.timestamp) || "just now",
         status: statusText,
+        headline: HEADLINES[payload.newStatus] ?? status,
       });
     } catch (err) {
       if (err instanceof WhatsAppError) {

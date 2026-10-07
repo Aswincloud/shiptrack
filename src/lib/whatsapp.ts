@@ -16,6 +16,11 @@ export interface WhatsAppEnv {
   WHATSAPP_ACCESS_TOKEN?: string; // permanent System User token with whatsapp_business_messaging
   WHATSAPP_TEMPLATE_NAME?: string; // utility template for alerts; default "tracking_update"
   WHATSAPP_TEMPLATE_LANG?: string; // must match the template's language exactly; default "en"
+  // Set to "1" once the alert template has a dynamic header ({{1}}). The
+  // header is what a WhatsApp notification preview shows, so filling it with
+  // the status ("Out for delivery") makes each alert recognisable from the
+  // lock screen instead of a fixed "Order Tracking Update".
+  WHATSAPP_TEMPLATE_HEADER_PARAM?: string;
   WHATSAPP_BUSINESS_NUMBER?: string; // E.164 digits of the business number users message to link
   WHATSAPP_APP_SECRET?: string; // Meta app secret; validates X-Hub-Signature-256 on webhooks
   WHATSAPP_WEBHOOK_VERIFY_TOKEN?: string; // the string pasted into Meta's webhook config
@@ -38,6 +43,9 @@ export interface TrackingUpdateParams {
   location: string; // {{3}}
   time: string; // {{4}}
   status: string; // {{5}}
+  // Short status for the header, e.g. "Out for delivery". Used only when the
+  // template has a header parameter (WHATSAPP_TEMPLATE_HEADER_PARAM=1).
+  headline?: string;
 }
 
 export type WhatsAppErrorCode =
@@ -180,7 +188,7 @@ async function post(env: WhatsAppEnv, message: Record<string, unknown>): Promise
 }
 
 interface TemplateComponent {
-  type: "body" | "button";
+  type: "header" | "body" | "button";
   sub_type?: "url" | "copy_code" | "quick_reply";
   index?: string;
   parameters: { type: "text"; text: string }[];
@@ -211,8 +219,18 @@ export function sendTrackingUpdate(env: WhatsAppEnv, to: string, p: TrackingUpda
     to,
     template: env.WHATSAPP_TEMPLATE_NAME || DEFAULT_TEMPLATE_NAME,
     lang: env.WHATSAPP_TEMPLATE_LANG || DEFAULT_TEMPLATE_LANG,
-    components: [{ type: "body", parameters: params.map((text) => ({ type: "text", text })) }],
+    components: [
+      // Meta caps a text header at 60 chars and rejects emoji in header params.
+      ...(env.WHATSAPP_TEMPLATE_HEADER_PARAM === "1"
+        ? [{ type: "header" as const, parameters: [{ type: "text" as const, text: sanitizeParam(stripEmoji(p.headline ?? p.status), 60, "Shipment update") }] }]
+        : []),
+      { type: "body", parameters: params.map((text) => ({ type: "text" as const, text })) },
+    ],
   });
+}
+
+function stripEmoji(s: string): string {
+  return s.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "").trim();
 }
 
 /**
