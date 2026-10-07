@@ -33,6 +33,7 @@ interface Env {
   WHATSAPP_ACCESS_TOKEN?: string;
   WHATSAPP_TEMPLATE_NAME?: string;
   WHATSAPP_TEMPLATE_LANG?: string;
+  WHATSAPP_TEMPLATE_HEADER_PARAM?: string;
   WHATSAPP_API_BASE?: string;
 }
 
