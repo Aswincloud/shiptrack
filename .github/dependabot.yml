@@ -5,3 +5,14 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    # Minor and patch bumps arrive as one weekly PR, which
+    # dependabot-automerge.yml merges once both Workers builds pass. Majors
+    # (e.g. TypeScript 5 -> 7) stay ungrouped, one PR each, for a human to
+    # review: they're what broke `npm ci` in #8.
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+      security:
+        applies-to: security-updates
+        update-types: ["minor", "patch"]
