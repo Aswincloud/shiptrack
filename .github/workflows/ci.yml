@@ -1,0 +1,37 @@
+name: CI
+
+# Fast gate that runs on every PR and on main: typecheck, lint, and the parser
+# unit tests. The Cloudflare Workers builds already run `next build` (which does
+# its own typecheck + lint), but they don't run the tests and they only report
+# from the Cloudflare side — this job is a required status check in the branch
+# ruleset so a red test actually blocks a merge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # main merges through a merge queue, which runs required checks on the
+  # merge_group ref. Without this the `test` check never reports in the queue
+  # and the merge hangs until it times out.
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
