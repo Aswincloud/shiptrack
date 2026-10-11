@@ -12,6 +12,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "npm run build:web && opennextjs-cloudflare preview",
     "build:web": "opennextjs-cloudflare build",
     "deploy:web": "npm run build:web",
@@ -37,6 +39,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.3.8",
     "typescript": "^5.7.0",
+    "vitest": "^3.2.4",
     "wrangler": "4.147.0"
   },
   "//overrides": "sharp <0.35.4 is a transitive dev-only dep (wrangler -> miniflare) flagged by GHSA-rgj7-g3m4-5g8c (libheif). next already resolves 0.35.4; this forces miniflare's nested copy up to match. Remove once wrangler ships a miniflare with sharp >=0.35.4.",

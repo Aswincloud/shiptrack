@@ -1,0 +1,21 @@
+  Forwarding Details : 
+  10/10/2026    Time : 16:10:00   
+  City : Ahmedabad   WayNo : MMAA5801655   
+  Activity : Despatched to Ahmedabad   
+  Pieces : 1   Weight : 0.4   
+  
+  10/10/2026    Time : 12:36:00   
+  City : Chennai   WayNo : IMAA5777086   
+  Activity : Recieved at Chennai - GDX   
+  Pieces : 1   Weight : 0.05   
+  
+  10/10/2026    Time : 11:03:00   
+  City : Chennai   WayNo : IMAA62420991   
+  Activity : Despatched to Chennai - NOR   
+  Pieces : 1   Weight : 0.67   
+  
+  10/10/2026    Time : 03:29:09   
+  City : Chennai   WayNo : MMAA94903194      
+  Activity : Received at Chennai   
+  Pieces : 1   Weight : 0.67   
+  

@@ -1,0 +1,15 @@
+  Forwarding Details : 
+  09/10/2026    Time : 15:20:00   
+  City : Pondicherry   WayNo : DEL12345678   
+  Activity : Delivered   
+  Pieces : 1   Weight : 0.4   
+  
+  09/10/2026    Time : 08:10:00   
+  City : Pondicherry   WayNo : OFD12345678   
+  Activity : Out for Delivery - Area : PON   
+  Pieces : 1   Weight : 0.4   
+  
+  08/10/2026    Time : 19:45:00   
+  City : Chennai   WayNo : TRN12345678   
+  Activity : Despatched to Pondicherry   
+  Pieces : 1   Weight : 0.4   
