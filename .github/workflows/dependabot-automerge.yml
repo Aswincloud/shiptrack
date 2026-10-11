@@ -1,0 +1,74 @@
+name: Dependabot auto-merge
+
+# Approves and merges Dependabot's minor/patch PRs once both Workers builds
+# (the only real CI: they run `npm ci` and the full build) have passed.
+# Majors are left for a human.
+#
+# `main` needs a code-owner approval, and GitHub doesn't count an approval
+# from GITHUB_TOKEN, so the approval and the merge use WRITE_ACCESS_PAT, the
+# same write-collaborator account the org auto-approve workflow uses. Runs
+# started by Dependabot only see *Dependabot* secrets, so that PAT must also be
+# stored as a Dependabot secret.
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.user.login == 'dependabot[bot]'
+    timeout-minutes: 45
+    steps:
+      - name: Read update metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip majors
+        if: steps.meta.outputs.update-type == 'version-update:semver-major'
+        run: echo "↷ Major update — leaving it for a human review."
+
+      - name: Wait for both Workers builds to pass
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # `gh pr checks --watch` would wait on this job too, so poll just the
+          # two Cloudflare builds by name.
+          for _ in $(seq 1 80); do
+            checks="$(gh pr checks "$PR" --repo "$REPO" --json name,bucket \
+              --jq '[.[] | select(.name == "Workers Builds: shiptrack" or .name == "Workers Builds: shiptrack-poller")]' || echo '[]')"
+            total="$(jq length <<<"$checks")"
+            passed="$(jq '[.[] | select(.bucket == "pass")] | length' <<<"$checks")"
+            failed="$(jq '[.[] | select(.bucket == "fail" or .bucket == "cancel")] | length' <<<"$checks")"
+            if [ "$failed" -gt 0 ]; then echo "✗ A Workers build failed — not merging."; exit 1; fi
+            if [ "$total" -eq 2 ] && [ "$passed" -eq 2 ]; then echo "✓ Both Workers builds passed."; exit 0; fi
+            sleep 30
+          done
+          echo "✗ Timed out waiting for the Workers builds."; exit 1
+
+      - name: Approve and merge
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        env:
+          GH_TOKEN: ${{ secrets.WRITE_ACCESS_PAT }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GH_TOKEN" ]; then
+            echo "✗ WRITE_ACCESS_PAT isn't available as a Dependabot secret — see the header of this workflow."
+            exit 1
+          fi
+          gh pr review "$PR" --repo "$REPO" --approve --body "Auto-approved: Dependabot ${{ steps.meta.outputs.update-type }}, both Workers builds passed."
+          # main uses a merge queue; this enqueues the PR.
+          gh pr merge "$PR" --repo "$REPO"
