@@ -6,6 +6,7 @@
   "description": "Open-source shipment tracking for Indian and international couriers. Starts with Blue Dart.",
   "homepage": "https://github.com/aswin/shiptrack",
   "//deploy:web": "Cloudflare Workers Builds invokes `npm run deploy:web` as its BUILD command, on every branch — so this script must only build, never deploy. Deploying is the build trigger's own job: `wrangler deploy` on main, `wrangler versions upload` on other branches. If this script deploys, every branch push ships to production. Use `npm run deploy` for a manual full deploy.",
+  "//next": "Pinned to 16.3.x. Next 16.4 moved preview props into a standalone .next/server/preview-props.json that @opennextjs/cloudflare 1.20.x doesn't inline, so every dynamic route crashes at runtime with Cloudflare error 1101 (loadManifest preview-props) even though `next build` passes — this took prod down from #91 on 2026-10-12. Unpin to ^16.4 only once OpenNext supports it (opennextjs/opennextjs-cloudflare#1356).",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -26,7 +27,7 @@
   "dependencies": {
     "@aswincloud/auth": "^0.5.0",
     "@opennextjs/cloudflare": "^1.20.9",
-    "next": "^16.3.6",
+    "next": "~16.3.8",
     "react": "^19.2.8",
     "react-dom": "^19.3.0",
     "zod": "^4.6.5"
