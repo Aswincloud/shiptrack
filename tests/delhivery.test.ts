@@ -50,3 +50,21 @@ describe("delhivery parser", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+describe("delhivery hub dispatch scans", () => {
+  // A hub-to-hub "Dispatched" scan with no decisive status code must read as
+  // in transit; only a last-leg phrase means out for delivery.
+  it("reads a bare 'Dispatched' hub scan as in transit", async () => {
+    const body = JSON.stringify({
+      statusCode: 200,
+      data: [{
+        awb: "1234567890123",
+        status: { status: "Dispatched", statusType: "UD", statusDateTime: "2026-10-16T10:00:00", instructions: "Dispatched to Chennai_Hub" },
+        trackingStates: [{ label: "In Transit", scans: [{ scan: "Manifested", scanType: "UD", scannedLocation: "Bangalore", scanDateTime: "2026-10-15T10:00:00", scanNslRemark: "Shipment manifested" }] }],
+      }],
+    });
+    stubFetch([{ body }]);
+    const r = await delhivery.track("1234567890123");
+    expect(r.status).toBe("in_transit");
+  });
+});
