@@ -33,3 +33,27 @@ describe("shiprocket parser", () => {
     await expect(shiprocket.track("000000000")).rejects.toMatchObject({ code: "not_found" });
   });
 });
+
+describe("shiprocket hub outscans", () => {
+  // Blue Dart (behind many Shiprocket AWBs) logs "SHIPMENT OUTSCANNED TO
+  // NETWORK" each time a parcel leaves a hub. That is movement, not the last
+  // leg — reading it as out-for-delivery emailed a watcher too early.
+  it("treats 'outscanned to network' as in transit, not out for delivery", async () => {
+    stubFetch([{ body: fixture("shiprocket", "hub_outscans.html") }]);
+    const r = await shiprocket.track("90697969876");
+
+    expect(r.status).toBe("in_transit");
+    expect(r.events.filter((e) => e.status === "out_for_delivery")).toHaveLength(0);
+    expect(r.events[r.events.length - 1].description).toBe("SHIPMENT OUTSCANNED TO NETWORK");
+  });
+
+  it("still reads a real last-mile scan as out for delivery", async () => {
+    const html = fixture("shiprocket", "hub_outscans.html").replace(
+      "<ul>\n",
+      '<ul>\n<li><activity>SHIPMENT OUTSCANNED FOR DELIVERY</activity><activity>KOLLAM</activity><span class="date">17 Oct 2026</span><span class="time">10:00 AM</span></li>\n',
+    );
+    stubFetch([{ body: html }]);
+    const r = await shiprocket.track("90697969876");
+    expect(r.status).toBe("out_for_delivery");
+  });
+});

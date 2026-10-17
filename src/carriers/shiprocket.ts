@@ -26,9 +26,22 @@ function mapStatus(text: string): ShipmentStatus {
     return "exception";
   }
   if (t.includes("delivered")) return "delivered";
-  if (t.includes("out for delivery") || t.includes("outscan") || t.includes("dispatched")) return "out_for_delivery";
+  // Only the phrases couriers use for the last leg. "Outscan" / "dispatched"
+  // on their own mean the parcel left a hub: Blue Dart (behind many Shiprocket
+  // AWBs) logs "SHIPMENT OUTSCANNED TO NETWORK" at every hop, and treating that
+  // as out-for-delivery emailed a watcher "out for delivery" while the parcel
+  // was still two hubs away.
+  if (
+    t.includes("out for delivery") ||
+    t.includes("out-for-delivery") ||
+    t.includes("outscan for delivery") ||
+    t.includes("outscanned for delivery") ||
+    t.includes("dispatched for delivery")
+  ) {
+    return "out_for_delivery";
+  }
   if (t.includes("picked") || t.includes("pickup") || t.includes("pick up")) return "picked_up";
-  if (t.includes("transit") || t.includes("in-scan") || t.includes("inscan") || t.includes("arrived") || t.includes("bag") || t.includes("received") || t.includes("shipment") || t.includes("order received")) {
+  if (t.includes("transit") || t.includes("in-scan") || t.includes("inscan") || t.includes("outscan") || t.includes("dispatched") || t.includes("arrived") || t.includes("bag") || t.includes("received") || t.includes("shipment") || t.includes("order received")) {
     return "in_transit";
   }
   return "unknown";

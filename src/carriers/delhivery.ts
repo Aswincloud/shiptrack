@@ -60,7 +60,15 @@ function mapStatus(statusType: string | undefined, status: string | undefined): 
   const t = (status ?? "").toLowerCase();
   if (t.includes("rto") || t.includes("returned") || t.includes("return to")) return "returned";
   if (t.includes("delivered")) return "delivered";
-  if (t.includes("out for delivery") || t.includes("dispatched") || t.includes("out scan") || t.includes("outscan"))
+  // Last-leg phrases only. A bare "dispatched" / "outscan" is a parcel leaving
+  // a hub (see the Shiprocket note on Blue Dart's "outscanned to network") and
+  // falls through to in_transit below.
+  if (
+    t.includes("out for delivery") ||
+    t.includes("dispatched for delivery") ||
+    t.includes("out scan for delivery") ||
+    t.includes("outscan for delivery")
+  )
     return "out_for_delivery";
   if (
     t.includes("undelivered") ||
@@ -77,6 +85,7 @@ function mapStatus(statusType: string | undefined, status: string | undefined): 
   if (
     t.includes("transit") ||
     t.includes("scan") ||
+    t.includes("dispatched") ||
     t.includes("received") ||
     t.includes("departed") ||
     t.includes("arrived") ||
