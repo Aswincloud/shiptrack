@@ -1,5 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
-import { carryForwardStatus, overallStatus, stripTags } from "./normalize";
+import { carryForwardStatus, overallStatus, stripTags, isFailedAttempt } from "./normalize";
 
 // ST Courier (stcourier.com) publishes no developer API — no docs, no keys, no
 // portal. Their own site tracks via a two-step CodeIgniter flow that we
@@ -32,6 +32,7 @@ const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Geck
 
 function mapStatus(text: string): ShipmentStatus {
   const t = text.toLowerCase();
+  if (isFailedAttempt(t)) return "exception";
   if (t.includes("delivered") && !t.includes("undelivered") && !t.includes("not delivered")) return "delivered";
   if (t.includes("out for delivery") || t.includes("out for del")) return "out_for_delivery";
   if (t.includes("rto") || t.includes("returned") || t.includes("return to")) return "returned";

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { carryForwardStatus, overallStatus, decodeEntities, stripTags } from "@/carriers/normalize";
+import { carryForwardStatus, overallStatus, decodeEntities, stripTags, isFailedAttempt } from "@/carriers/normalize";
 import type { TrackingEvent } from "@/carriers/types";
 
 const ev = (status: TrackingEvent["status"], description = ""): TrackingEvent => ({
@@ -59,5 +59,38 @@ describe("decodeEntities", () => {
 describe("stripTags", () => {
   it("drops tags, decodes entities and collapses whitespace", () => {
     expect(stripTags("<b>Hello</b>&nbsp;&nbsp;<i>world</i>")).toBe("Hello world");
+  });
+});
+
+describe("isFailedAttempt", () => {
+  // Unrecognised failed attempts used to inherit the previous scan's
+  // out_for_delivery, so a failed delivery kept reading "out for delivery".
+  it.each([
+    "UD - for Consignee Rescheduled Delivery",
+    "UD - Door Locked",
+    "Consignee not available",
+    "Delivery rescheduled",
+    "Attempt failed",
+    "Shipment Undelivered",
+    "Not delivered - consignee not available",
+    "Out of delivery area",
+    "Misrouted",
+    "Customer refused delivery",
+    "Delivery attempted - premises closed",
+  ])("flags %s", (text) => {
+    expect(isFailedAttempt(text)).toBe(true);
+  });
+
+  it.each([
+    "Delivered",
+    "Delivered after 2 attempts",
+    "Out for Delivery",
+    "RTO Initiated",
+    "Return to origin - consignee refused",
+    "In Transit",
+    "SHIPMENT OUTSCANNED TO NETWORK",
+    "UDAIPUR HUB inscan",
+  ])("does not flag %s", (text) => {
+    expect(isFailedAttempt(text)).toBe(false);
   });
 });

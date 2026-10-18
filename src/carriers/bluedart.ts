@@ -1,5 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
-import { carryForwardStatus, overallStatus, stripTags } from "./normalize";
+import { carryForwardStatus, overallStatus, stripTags, isFailedAttempt } from "./normalize";
 
 // Blue Dart's commercial "Tracking API" requires customer credentials (LoginID
 // and a tracking-API License Key) issued by a Blue Dart account manager. They
@@ -18,6 +18,7 @@ const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Geck
 
 function mapStatus(text: string): ShipmentStatus {
   const t = text.toLowerCase();
+  if (isFailedAttempt(t)) return "exception";
   if (t.includes("delivered") && !t.includes("attempted") && !t.includes("undelivered")) return "delivered";
   if (t.includes("out for delivery")) return "out_for_delivery";
   if (t.includes("returned") || t.includes("rto")) return "returned";

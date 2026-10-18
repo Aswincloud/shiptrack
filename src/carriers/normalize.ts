@@ -40,6 +40,39 @@ export function overallStatus(
   return "unknown";
 }
 
+// A delivery attempt that failed. Couriers word these many ways ("UD - Door
+// Locked", "Consignee not available", "Delivery rescheduled", "Out of delivery
+// area"), and when a mapper didn't recognise one, carryForwardStatus() gave it
+// the previous scan's status — usually out_for_delivery — so a failed attempt
+// kept reading "out for delivery". Every text-based mapper checks this first.
+// Returns to origin are left to each mapper's own "returned" rule.
+const FAILED_ATTEMPT = [
+  "undelivered",
+  "not delivered",
+  "unable to deliver",
+  "reschedul",
+  "door lock",
+  "premises closed",
+  "not available",
+  "not reachable",
+  "attempt",
+  "refused",
+  "rejected",
+  "out of delivery area",
+  "misrout",
+];
+
+export function isFailedAttempt(text: string): boolean {
+  const t = text.toLowerCase().trim();
+  if (t.includes("rto") || t.includes("return")) return false;
+  // ST Courier and others prefix undelivered scans with "UD", e.g.
+  // "UD - for Consignee Rescheduled Delivery".
+  if (/^ud\b/.test(t)) return true;
+  // "Delivered after 2 attempts" is a delivery, not a failed one.
+  if (/(^|[^n])delivered/.test(t.replace(/not delivered/g, ""))) return false;
+  return FAILED_ATTEMPT.some((p) => t.includes(p));
+}
+
 // Named + numeric entities, decoded in ONE pass. Chaining replace() calls
 // (first &amp; -> &, then &#39; -> ') double-unescapes: the literal text
 // "&amp;#39;" in a page means &#39; to the reader, but a second pass turned it

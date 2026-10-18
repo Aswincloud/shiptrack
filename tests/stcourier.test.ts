@@ -52,3 +52,19 @@ describe("stcourier parser", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+describe("stcourier failed attempts", () => {
+  // "UD - …" is ST Courier's undelivered code. It used to fall through as
+  // unknown and inherit the previous out_for_delivery, so a failed attempt
+  // kept reading "out for delivery".
+  it("reads 'UD - for Consignee Rescheduled Delivery' as an exception", async () => {
+    stubFetch([checkOk, { body: fixture("stcourier", "undelivered_rescheduled.html") }]);
+    const r = await stcourier.track("64451220304");
+
+    expect(r.status).toBe("exception");
+    const last = r.events[r.events.length - 1];
+    expect(last.description).toMatch(/^UD - /);
+    expect(last.status).toBe("exception");
+    expect(r.events.find((e) => e.description === "Out for Delivery")?.status).toBe("out_for_delivery");
+  });
+});

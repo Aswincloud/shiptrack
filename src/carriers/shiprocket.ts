@@ -1,5 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
-import { carryForwardStatus, overallStatus, stripTags } from "./normalize";
+import { carryForwardStatus, overallStatus, stripTags, isFailedAttempt } from "./normalize";
 
 // Shiprocket is a shipping aggregator. Its public tracking page resolves any
 // AWB to its underlying courier (Blue Dart, Delhivery, Ekart, XpressBees, …)
@@ -19,6 +19,7 @@ const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Geck
 
 function mapStatus(text: string): ShipmentStatus {
   const t = text.toLowerCase();
+  if (isFailedAttempt(t)) return "exception";
   // Order matters: check the "negative" / exception phrases that contain the
   // word "delivered" (e.g. "undelivered") before the plain "delivered" check.
   if (t.includes("rto") || t.includes("returned") || t.includes("return to origin")) return "returned";
