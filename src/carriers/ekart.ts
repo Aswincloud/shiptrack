@@ -1,5 +1,5 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
-import { carryForwardStatus, overallStatus } from "./normalize";
+import { carryForwardStatus, overallStatus, isFailedAttempt } from "./normalize";
 
 // Ekart Logistics (ekartlogistics.com) — Flipkart's in-house courier. No
 // developer API or credentials. Their public tracking page is a React SPA that
@@ -43,6 +43,7 @@ const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Geck
 
 function mapStatus(text: string): ShipmentStatus {
   const t = text.toLowerCase();
+  if (isFailedAttempt(t)) return "exception";
   if (t.includes("rto") || t.includes("return")) return "returned";
   if (
     t.includes("undelivered") ||

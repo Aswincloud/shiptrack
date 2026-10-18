@@ -6,7 +6,7 @@ import {
   TrackingResult,
   TrackOptions,
 } from "./types";
-import { carryForwardStatus, overallStatus } from "./normalize";
+import { carryForwardStatus, overallStatus, isFailedAttempt } from "./normalize";
 
 // Delhivery is tracked from two sources, best-first.
 //
@@ -58,6 +58,7 @@ function mapStatus(statusType: string | undefined, status: string | undefined): 
   if (code === "PU") return "picked_up";
 
   const t = (status ?? "").toLowerCase();
+  if (isFailedAttempt(t)) return "exception";
   if (t.includes("rto") || t.includes("returned") || t.includes("return to")) return "returned";
   if (t.includes("delivered")) return "delivered";
   // Last-leg phrases only. A bare "dispatched" / "outscan" is a parcel leaving
