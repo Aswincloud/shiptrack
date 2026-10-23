@@ -168,7 +168,11 @@ function classify(httpStatus: number, body: GraphErrorBody | null): WhatsAppErro
   return new WhatsAppError(`WhatsApp upstream error: ${detail}`, "upstream_error", code);
 }
 
-async function post(env: WhatsAppEnv, message: Record<string, unknown>): Promise<string> {
+// WHATSAPP_API_BASE points sends at wa-relay, which forwards them to Meta
+// unchanged and records accepted customer messages in the Chatwoot support
+// inbox, so a reply to a tracking update arrives with context. X-Aswin-Sender
+// names the sender there; one-time codes say "otp" and are never recorded.
+async function post(env: WhatsAppEnv, message: Record<string, unknown>, sender = "shiptrack"): Promise<string> {
   if (!whatsappConfigured(env)) throw new WhatsAppError("WhatsApp is not configured", "not_configured");
   const base = (env.WHATSAPP_API_BASE ?? DEFAULT_API_BASE).replace(/\/$/, "");
   const url = `${base}/${GRAPH_VERSION}/${encodeURIComponent(env.WHATSAPP_PHONE_NUMBER_ID!)}/messages`;
@@ -177,6 +181,7 @@ async function post(env: WhatsAppEnv, message: Record<string, unknown>): Promise
     headers: {
       Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
       "Content-Type": "application/json",
+      "X-Aswin-Sender": sender,
     },
     body: JSON.stringify({ messaging_product: "whatsapp", recipient_type: "individual", ...message }),
   });
@@ -198,12 +203,13 @@ interface TemplateComponent {
 export function sendTemplate(
   env: WhatsAppEnv,
   args: { to: string; template: string; lang: string; components: TemplateComponent[] },
+  sender?: string,
 ): Promise<string> {
   return post(env, {
     to: args.to,
     type: "template",
     template: { name: args.template, language: { code: args.lang }, components: args.components },
-  });
+  }, sender);
 }
 
 /** Shipment alert via the utility template. Parameters are sanitised here. */
@@ -261,7 +267,7 @@ export function sendOtp(env: WhatsAppEnv, to: string, code: string): Promise<str
       { type: "body", parameters: [{ type: "text", text: code }] },
       { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] },
     ],
-  });
+  }, "otp");
 }
 
 // ---------------------------------------------------------------------------
