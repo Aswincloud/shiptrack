@@ -14,6 +14,12 @@
   "observability": {
     "enabled": true
   },
+  // WhatsApp sends go through wa-relay, which forwards them to Meta unchanged and
+  // records customer messages (never one-time codes) in the Chatwoot support
+  // inbox. Remove to send straight to graph.facebook.com again.
+  "vars": {
+    "WHATSAPP_API_BASE": "https://wa-relay.aswincloud.com/graph"
+  },
   "d1_databases": [
     {
       "binding": "DB",
