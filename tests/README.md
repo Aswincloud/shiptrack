@@ -31,7 +31,7 @@ To refresh a public one, e.g. TPC:
 
 ```sh
 curl -s -A "Mozilla/5.0" \
-  "https://www.tpcindia.com/TPCWebService/TrackMobDe.ashx?podno=<CONSIGNMENT>" \
+  "https://www.tpcglobe.com/TPCWebService/TrackMobDe.ashx?podno=<CONSIGNMENT>" \
   -o tests/fixtures/tpc/in_transit.txt
 ```
 

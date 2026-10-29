@@ -2,16 +2,23 @@ import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } 
 import { carryForwardStatus, overallStatus, isFailedAttempt } from "./normalize";
 
 // The Professional Couriers (tpcindia.com) publishes no developer API. Their
-// website's Track n Trace form sits behind an image captcha, and the old
-// `/Tracking2014.aspx?id=` deep link now bounces to /Oops.aspx, so the site
-// itself can't be scraped without an OCR step.
+// website's search now posts to /CaptchaGate.aspx, and the old
+// `/Tracking2014.aspx?id=` deep link bounces to /Oops.aspx, so the site itself
+// can't be read without solving a captcha.
 //
 // Their mobile app, however, reads a plain-text feed that needs neither a
 // captcha nor credentials:
 //
-//   GET https://www.tpcindia.com/TPCWebService/TrackMobDe.ashx?podno=<CONSIGNMENT>
+//   GET https://www.tpcglobe.com/TPCWebService/TrackMobDe.ashx?podno=<CONSIGNMENT>
 //
-// Response (text/plain, CRLF line endings, newest scan first):
+// It lived on www.tpcindia.com until 27 Oct 2026, when that copy started
+// redirecting to /Oops.aspx (around the TPC GO app update of 22 Oct). The
+// same path on tpcglobe.com, the app developer's domain, serves the same feed.
+//
+// Response (text/plain, CRLF line endings, newest scan first). Delivered
+// consignments may open with a free-text summary ("PON… is delivered at Pune
+// on Monday, …") before the header; it carries no "Activity :" so the block
+// parser below skips it.
 //
 //     Forwarding Details :
 //     08/09/2026    Time : 10:48:00
@@ -42,7 +49,7 @@ import { carryForwardStatus, overallStatus, isFailedAttempt } from "./normalize"
 // The feed carries no summary status, origin, destination or ETA; status is
 // derived from the newest activity text.
 
-const FEED_URL = "https://www.tpcindia.com/TPCWebService/TrackMobDe.ashx";
+const FEED_URL = "https://www.tpcglobe.com/TPCWebService/TrackMobDe.ashx";
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
