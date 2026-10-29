@@ -29,6 +29,20 @@ describe("tpc parser (real mobile-feed fixtures)", () => {
     expect(r.events[r.events.length - 1].description).toMatch(/delivered/i);
   });
 
+  it("parses the tpcglobe.com delivered feed, skipping its summary block", async () => {
+    // Real capture: delivered consignments now open with "… is delivered at
+    // Pune on Monday, … acknowledged with signature" before the header.
+    const spy = stubFetch([{ body: fixture("tpc", "delivered_with_summary.txt") }]);
+    const r = await tpc.track("PON7004407");
+
+    expect(spy.mock.calls[0][0]).toMatch(/^https:\/\/www\.tpcglobe\.com\/TPCWebService\/TrackMobDe\.ashx\?podno=PON7004407$/);
+    expect(r.status).toBe("delivered");
+    const last = r.events[r.events.length - 1];
+    expect(last.description).toMatch(/^Delivered/);
+    expect(last.location).toBe("Pune");
+    expect(r.events.some((e) => /is delivered at|acknowledged/i.test(e.description))).toBe(false);
+  });
+
   it("reads an out-for-delivery feed as out_for_delivery", async () => {
     stubFetch([{ body: fixture("tpc", "out_for_delivery.txt") }]);
     const r = await tpc.track("PON7003482");
