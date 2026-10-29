@@ -1,4 +1,4 @@
-import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
+import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult, TrackOptions } from "./types";
 import { carryForwardStatus, overallStatus, isFailedAttempt } from "./normalize";
 
 // The Professional Couriers (tpcindia.com) publishes no developer API. Their
@@ -14,6 +14,16 @@ import { carryForwardStatus, overallStatus, isFailedAttempt } from "./normalize"
 // It lived on www.tpcindia.com until 27 Oct 2026, when that copy started
 // redirecting to /Oops.aspx (around the TPC GO app update of 22 Oct). The
 // same path on tpcglobe.com, the app developer's domain, serves the same feed.
+//
+// That feed also only answers Indian ISP networks: from Cloudflare (where this
+// runs) every request times out with a 522, while from an Indian home
+// connection it answers in ~0.15s. So when TPC_RELAY_URL and TPC_RELAY_SECRET
+// are set, requests go through tpc-relay: a stdlib-only service on the
+// operator's home server (/opt/tpc-relay, systemd unit tpc-relay.service),
+// exposed through the existing cloudflared tunnel at tpc-relay.aswincloud.com.
+// It serves only GET /track?podno=<consignment>, fetches only this feed, and
+// requires the shared secret in X-Relay-Secret. Without the relay configured,
+// the carrier calls TPC directly (works from Indian networks, e.g. local dev).
 //
 // Response (text/plain, CRLF line endings, newest scan first). Delivered
 // consignments may open with a free-text summary ("PON… is delivered at Pune
@@ -161,7 +171,7 @@ function parseFeed(text: string): TrackingEvent[] {
 export const tpc: Carrier = {
   id: "tpc",
   name: "The Professional Couriers",
-  async track(trackingNumber: string): Promise<TrackingResult> {
+  async track(trackingNumber: string, opts?: TrackOptions): Promise<TrackingResult> {
     // Consignment numbers are a 2-5 letter branch prefix plus digits, e.g.
     // PON8334106 (the WayNo bag references in the feed do *not* resolve). Keep
     // the check loose — TPC treats anything unknown as "no scans" anyway.
@@ -170,16 +180,26 @@ export const tpc: Carrier = {
       throw new CarrierError("Invalid Professional Couriers consignment number format.", "invalid_input", 400);
     }
 
-    const url = `${FEED_URL}?podno=${encodeURIComponent(cleaned)}`;
+    const direct = `${FEED_URL}?podno=${encodeURIComponent(cleaned)}`;
+    const relay = opts?.tpcRelayUrl && opts.tpcRelaySecret ? opts.tpcRelayUrl.replace(/\/$/, "") : null;
+    const url = relay ? `${relay}/track?podno=${encodeURIComponent(cleaned)}` : direct;
     const res = await fetch(url, {
       method: "GET",
-      headers: { "User-Agent": UA, Accept: "text/plain, */*" },
+      headers: relay
+        ? { Accept: "text/plain, */*", "X-Relay-Secret": opts!.tpcRelaySecret! }
+        : { "User-Agent": UA, Accept: "text/plain, */*" },
       cache: "no-store",
     });
 
     if (res.status === 429) throw new CarrierError("Professional Couriers rate-limited", "rate_limited", 429);
+    if (relay && res.status === 401) {
+      // Our own misconfiguration, not TPC's: the Worker secret and the relay's
+      // /etc/tpc-relay.env have drifted apart.
+      throw new CarrierError("TPC relay rejected the shared secret.", "not_configured", 503);
+    }
     if (!res.ok) {
-      throw new CarrierError(`Professional Couriers upstream error (${res.status})`, "upstream_error", 502);
+      const where = relay ? "via relay " : "";
+      throw new CarrierError(`Professional Couriers upstream error ${where}(${res.status})`, "upstream_error", 502);
     }
 
     const text = await res.text();
@@ -199,7 +219,7 @@ export const tpc: Carrier = {
       status: overallStatus(events),
       events,
       fetchedAt: new Date().toISOString(),
-      raw: { source: "mobile-feed", url },
+      raw: { source: relay ? "mobile-feed-relay" : "mobile-feed", url: direct },
     };
   },
 };

@@ -26,6 +26,9 @@ export interface AppEnv {
   MICROSOFT_CLIENT_SECRET?: string;
   MICROSOFT_TENANT_ID?: string;
   DELHIVERY_API_TOKEN?: string;
+  // TPC relay (see src/carriers/tpc.ts). Both set ⇒ TPC is fetched through it.
+  TPC_RELAY_URL?: string;
+  TPC_RELAY_SECRET?: string;
   // WhatsApp alerts (Meta Cloud API). All optional: unset ⇒ the feature is
   // hidden in Settings and the poller never attempts a send. See README.
   WHATSAPP_PHONE_NUMBER_ID?: string;

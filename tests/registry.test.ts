@@ -40,3 +40,15 @@ describe("detectCarriers", () => {
     expect(detectCarriers("  ")).toEqual([]);
   });
 });
+
+describe("trackOptionsFromEnv", () => {
+  it("maps env names to carrier options and tolerates a missing env", async () => {
+    const { trackOptionsFromEnv } = await import("@/carriers/types");
+    expect(trackOptionsFromEnv({ DELHIVERY_API_TOKEN: "d", TPC_RELAY_URL: "u", TPC_RELAY_SECRET: "s" })).toEqual({
+      delhiveryToken: "d",
+      tpcRelayUrl: "u",
+      tpcRelaySecret: "s",
+    });
+    expect(trackOptionsFromEnv(null)).toEqual({ delhiveryToken: undefined, tpcRelayUrl: undefined, tpcRelaySecret: undefined });
+  });
+});

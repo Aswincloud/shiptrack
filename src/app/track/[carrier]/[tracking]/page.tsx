@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import Link from "next/link";
 import { getCarrier } from "@/carriers/registry";
-import { CarrierError, type TrackingResult } from "@/carriers/types";
+import { CarrierError, trackOptionsFromEnv, type TrackingResult } from "@/carriers/types";
 import { getEnvAsync } from "@/lib/env";
 import { humanStatus } from "@/lib/status";
 import { Timeline } from "@/app/components/Timeline";
@@ -28,7 +28,7 @@ const lookup = cache(
     if (!carrier) return { result: null, error: "unknown_carrier" };
     const env = await getEnvAsync();
     try {
-      return { result: await carrier.track(tracking, { delhiveryToken: env?.DELHIVERY_API_TOKEN }), error: null };
+      return { result: await carrier.track(tracking, trackOptionsFromEnv(env)), error: null };
     } catch (err) {
       return { result: null, error: err instanceof CarrierError ? err.code : "error" };
     }

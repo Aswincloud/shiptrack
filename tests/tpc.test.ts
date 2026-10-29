@@ -67,3 +67,36 @@ describe("tpc parser (real mobile-feed fixtures)", () => {
     await expect(tpc.track("PON7003911")).rejects.toMatchObject({ code: "upstream_error" });
   });
 });
+
+describe("tpc relay", () => {
+  // TPC's feed only answers Indian ISP networks, so production fetches it
+  // through tpc-relay on the operator's home server.
+  const relayOpts = { tpcRelayUrl: "https://tpc-relay.example/", tpcRelaySecret: "s3cret" };
+
+  it("fetches through the relay with the shared secret when configured", async () => {
+    const spy = stubFetch([{ body: fixture("tpc", "delivered_with_summary.txt") }]);
+    const r = await tpc.track("PON7004407", relayOpts);
+
+    const [url, init] = spy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://tpc-relay.example/track?podno=PON7004407");
+    expect((init.headers as Record<string, string>)["X-Relay-Secret"]).toBe("s3cret");
+    expect(r.status).toBe("delivered");
+    expect(r.raw).toMatchObject({ source: "mobile-feed-relay" });
+  });
+
+  it("reports a rejected secret as not_configured, not a TPC outage", async () => {
+    stubFetch([{ status: 401, body: "unauthorized\n" }]);
+    await expect(tpc.track("PON7004407", relayOpts)).rejects.toMatchObject({ code: "not_configured" });
+  });
+
+  it("reports relay/upstream failures as upstream_error", async () => {
+    stubFetch([{ status: 504, body: "upstream unreachable\n" }]);
+    await expect(tpc.track("PON7004407", relayOpts)).rejects.toMatchObject({ code: "upstream_error" });
+  });
+
+  it("calls TPC directly when the relay isn't fully configured", async () => {
+    const spy = stubFetch([{ body: fixture("tpc", "delivered_with_summary.txt") }]);
+    await tpc.track("PON7004407", { tpcRelayUrl: "https://tpc-relay.example" }); // no secret
+    expect(spy.mock.calls[0][0]).toMatch(/^https:\/\/www\.tpcglobe\.com\//);
+  });
+});
