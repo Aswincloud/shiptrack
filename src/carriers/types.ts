@@ -33,6 +33,26 @@ export interface TrackingResult {
 // the carrier modules stay free of any environment/Cloudflare coupling.
 export interface TrackOptions {
   delhiveryToken?: string;
+  // TPC's feed only answers Indian ISP networks, not Cloudflare. When set, the
+  // TPC carrier fetches through this relay (a small service on an Indian host,
+  // see the comment in tpc.ts) instead of calling TPC directly.
+  tpcRelayUrl?: string;
+  tpcRelaySecret?: string;
+}
+
+// Build the per-request carrier options from an environment. Every caller of
+// Carrier.track() (track page, track API, poller) goes through this, so a new
+// carrier credential is added in one place.
+export function trackOptionsFromEnv(env: {
+  DELHIVERY_API_TOKEN?: string;
+  TPC_RELAY_URL?: string;
+  TPC_RELAY_SECRET?: string;
+} | null | undefined): TrackOptions {
+  return {
+    delhiveryToken: env?.DELHIVERY_API_TOKEN,
+    tpcRelayUrl: env?.TPC_RELAY_URL,
+    tpcRelaySecret: env?.TPC_RELAY_SECRET,
+  };
 }
 
 export interface Carrier {

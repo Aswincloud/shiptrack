@@ -19,7 +19,7 @@ import { signToken } from "../../src/lib/tokens";
 import { getCarrier } from "../../src/carriers/registry";
 import { emailResend } from "../../src/notifiers/email-resend";
 import { whatsappMeta, shouldNotifyWhatsapp } from "../../src/notifiers/whatsapp";
-import { CarrierError } from "../../src/carriers/types";
+import { CarrierError, trackOptionsFromEnv } from "../../src/carriers/types";
 
 interface Env {
   DB: D1Database;
@@ -28,6 +28,8 @@ interface Env {
   RESEND_FROM: string;
   APP_URL: string;
   DELHIVERY_API_TOKEN?: string;
+  TPC_RELAY_URL?: string;
+  TPC_RELAY_SECRET?: string;
   // WhatsApp alerts — optional; unset ⇒ never attempted.
   WHATSAPP_PHONE_NUMBER_ID?: string;
   WHATSAPP_ACCESS_TOKEN?: string;
@@ -82,7 +84,7 @@ async function processWatch(env: Env, w: WatchRow): Promise<void> {
 
   let result;
   try {
-    result = await carrier.track(w.tracking_number, { delhiveryToken: env.DELHIVERY_API_TOKEN });
+    result = await carrier.track(w.tracking_number, trackOptionsFromEnv(env));
   } catch (err) {
     const code = err instanceof CarrierError ? err.code : "unknown";
     // Bump poll_failures so listDueWatches() backs this watch off exponentially
