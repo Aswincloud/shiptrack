@@ -17,7 +17,8 @@ const DTDC_TRACK = "https://www.dtdc.com/track-your-shipment/";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ tracking: string }> }) {
   const { tracking } = await params;
-  const awb = decodeURIComponent(tracking).trim().toUpperCase();
+  // Already decoded by Next.js; decoding again would throw on a literal "%".
+  const awb = tracking.trim().toUpperCase();
   if (!/^[A-Z0-9-]{4,40}$/.test(awb)) {
     return NextResponse.redirect(DTDC_TRACK, 302);
   }
