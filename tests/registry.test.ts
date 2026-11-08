@@ -24,10 +24,10 @@ describe("detectCarriers", () => {
     expect(detectCarriers("PON7003911")).toContain("tpc");
   });
 
-  it("offers digit-only carriers for a numeric id but skips privateOnly delhivery in auto", () => {
+  it("offers digit-only carriers, Delhivery included, for a numeric id", () => {
     const got = detectCarriers("12345678901234");
     expect(got).toContain("amazon");
-    expect(got).not.toContain("delhivery");
+    expect(got).toContain("delhivery");
   });
 
   it("every detected id resolves in the registry", () => {
