@@ -96,17 +96,14 @@ const QA: { q: string; a: React.ReactNode; aText: string }[] = [
     q: "Where does the tracking data come from?",
     a: (
       <>
-        Blue Dart, Shiprocket, ST Courier, TPC and Amazon Shipping are read
-        from their public tracking pages — no paid aggregator. Delhivery is
-        the exception: it has no credential-free public page, so we use
-        Delhivery&apos;s official API, which only returns shipments booked
-        under our own Delhivery account. That means an arbitrary Delhivery AWB
-        won&apos;t resolve here yet — but most Delhivery e-commerce parcels can
-        be tracked via Shiprocket.
+        Blue Dart, Delhivery, Shiprocket, ST Courier, TPC, Ekart and Amazon
+        Shipping are read from the same public tracking data their own
+        websites use — no paid aggregator. Any of their tracking numbers works
+        here.
       </>
     ),
     aText:
-      "Blue Dart, Shiprocket, ST Courier, TPC and Amazon Shipping are read from their public tracking pages — no paid aggregator. Delhivery is the exception: it has no credential-free public page, so we use Delhivery's official API, which only returns shipments booked under our own Delhivery account. An arbitrary Delhivery AWB won't resolve here yet, but most Delhivery e-commerce parcels can be tracked via Shiprocket.",
+      "Blue Dart, Delhivery, Shiprocket, ST Courier, TPC, Ekart and Amazon Shipping are read from the same public tracking data their own websites use — no paid aggregator. Any of their tracking numbers works here.",
   },
   {
     q: "Can I add another carrier?",

@@ -321,32 +321,6 @@ export default function Home() {
         </button>
       </form>
 
-      {carrier === "delhivery" && (
-        <div
-          style={{
-            ...cardStyle,
-            padding: "12px 16px",
-            marginTop: 12,
-            background: "var(--warning-bg)",
-            borderColor: "var(--warning-border)",
-            display: "flex",
-            gap: 10,
-            alignItems: "flex-start",
-            fontSize: 13,
-            lineHeight: 1.5,
-            color: "var(--fg-soft)",
-          }}
-        >
-          <span aria-hidden style={{ fontSize: 15 }}>ℹ️</span>
-          <span>
-            <strong>Delhivery isn&apos;t fully public yet.</strong> Unlike Blue Dart, Delhivery
-            has no credential-free tracking page — its API only returns shipments booked under
-            our own Delhivery account. So this works for the operator&apos;s parcels, but a random
-            Delhivery AWB will show &ldquo;not found.&rdquo; For most e-commerce Delhivery
-            parcels, try <button type="button" onClick={() => chooseCarrier("shiprocket")} style={linkBtnStyle}>Shiprocket</button> instead.
-          </span>
-        </div>
-      )}
 
       {loading && <ResultSkeleton />}
 
@@ -675,12 +649,3 @@ function NotifyForm({
   );
 }
 
-const linkBtnStyle: React.CSSProperties = {
-  background: "none",
-  border: "none",
-  padding: 0,
-  font: "inherit",
-  color: "var(--accent)",
-  textDecoration: "underline",
-  cursor: "pointer",
-};
