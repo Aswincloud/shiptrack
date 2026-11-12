@@ -14,6 +14,7 @@ import {
   countOpenWatchesForUser,
   findOpenGuestWatch,
   getUserById,
+  listWatchesByUser,
   CONFIRM_TTL_SECONDS,
   DEFAULT_POLL_INTERVAL_SECONDS,
   MAX_GUEST_WATCHES_PER_EMAIL_PER_DAY,
@@ -23,7 +24,8 @@ import {
   MAX_POLL_INTERVAL_SECONDS,
 } from "@/lib/db";
 import { getCarrier } from "@/carriers/registry";
-import { readSession } from "@/lib/auth";
+import { readCaller } from "@/lib/auth";
+import { publicWatch } from "@/lib/watch-view";
 import { signToken } from "@/lib/tokens";
 import { sendEmail, watchCreatedEmail, confirmEmail } from "@/lib/email";
 import { buildWaLink, formatPhoneForDisplay, linkMessageText, whatsappLinkingConfigured } from "@/lib/whatsapp";
@@ -55,20 +57,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }
 
-  // Auth: prefer session cookie, then the ADMIN_TOKEN bearer (legacy / owner
-  // curl flow). A request carrying neither is a signed-out visitor asking us to
+  // Auth: prefer session cookie or a personal API key (Bearer st_…), then the
+  // ADMIN_TOKEN bearer (legacy / owner curl flow). A request carrying neither is a signed-out visitor asking us to
   // watch a shipment from a track page — allowed, but only ever as a
   // double-opt-in request: `guest` forces confirmation and rate limits below.
   //
   // `selfEmail` is the requester's own verified address, and stays null for the
   // ADMIN_TOKEN path — that token is the operator's own credential, so their
   // curl flow keeps activating watches outright.
-  const session = await readSession(env.TOKEN_SECRET, req);
+  const caller = await readCaller(env.TOKEN_SECRET, env.DB, req);
+  if (caller === "invalid") {
+    return NextResponse.json({ error: "invalid_api_key" }, { status: 401 });
+  }
   let userId: string | null = null;
   let selfEmail: string | null = null;
   let guest = false;
-  if (session) {
-    const user = await getUserById(env.DB, session.userId);
+  if (caller) {
+    const user = await getUserById(env.DB, caller.userId);
     if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     userId = user.id;
     selfEmail = user.email.toLowerCase();
@@ -287,4 +292,17 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ status: "active", id }, { status: 201 });
+}
+
+// GET /api/watches — the caller's own watches, newest first. Session or API key.
+export async function GET(req: NextRequest) {
+  const env = getEnv();
+  if (!env.DB || !env.TOKEN_SECRET) {
+    return NextResponse.json({ error: "not_configured" }, { status: 503 });
+  }
+  const caller = await readCaller(env.TOKEN_SECRET, env.DB, req);
+  if (caller === "invalid") return NextResponse.json({ error: "invalid_api_key" }, { status: 401 });
+  if (!caller) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const watches = await listWatchesByUser(env.DB, caller.userId);
+  return NextResponse.json({ watches: watches.map(publicWatch) });
 }

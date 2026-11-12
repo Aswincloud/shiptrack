@@ -46,6 +46,31 @@ curl http://localhost:3000/api/track/bluedart/1234567890
 
 Response shape: see [`src/carriers/types.ts`](src/carriers/types.ts).
 
+### Watches via a personal API key
+
+The lookup endpoints above are public. To **manage your own watches** from a
+script, create a key under Settings → API keys and send it as a bearer token.
+A key acts as your account: same watch cap and the same rule that mailing an
+address other than your own needs that address to confirm first.
+
+```bash
+# List your watches
+curl -H "Authorization: Bearer st_…" https://shiptrack.aswincloud.com/api/watches
+
+# Add one (emails your own account address, no confirmation needed)
+curl -X POST https://shiptrack.aswincloud.com/api/watches \
+  -H "Authorization: Bearer st_…" -H "Content-Type: application/json" \
+  -d '{"carrier":"bluedart","trackingNumber":"1234567890","email":"you@example.com"}'
+
+# Cancel one
+curl -X DELETE -H "Authorization: Bearer st_…" https://shiptrack.aswincloud.com/api/watches/<id>
+```
+
+Keys are created, listed and revoked only from the signed-in Settings page,
+never with a key — a leaked key can't mint more or list its siblings. The key
+is shown once at creation (only its SHA-256 is stored), up to five active per
+account, and a password reset revokes them all.
+
 ## Carrier credentials
 
 ### Blue Dart

@@ -4,6 +4,7 @@ import { readSessionFromCookies } from "@/lib/auth";
 import { getPhoneOtp, getPhoneVerification, getUserById } from "@/lib/db";
 import { hasRealPassword } from "@aswincloud/auth/d1";
 import { whatsappStatusFor } from "@/lib/whatsapp-status";
+import { listApiKeys, MAX_API_KEYS_PER_USER } from "@/lib/api-keys";
 import { SettingsClient } from "./client";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function SettingsPage() {
   // mid-flow shows the same code, not a fresh "Connect" button.
   const pendingLink = await getPhoneVerification(env.DB, user.id);
   const pendingOtp = await getPhoneOtp(env.DB, user.id);
+  const apiKeys = await listApiKeys(env.DB, user.id);
 
   return (
     <SettingsClient
@@ -31,6 +33,9 @@ export default async function SettingsPage() {
       hasPassword={hasRealPassword(user)}
       createdAt={user.created_at}
       whatsapp={whatsappStatusFor(env, user, pendingLink, pendingOtp)}
+      apiKeys={apiKeys}
+      maxApiKeys={MAX_API_KEYS_PER_USER}
+      appUrl={env.APP_URL}
     />
   );
 }

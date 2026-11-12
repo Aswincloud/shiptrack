@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import type { D1Database } from "@cloudflare/workers-types";
 import { signToken, verifyToken } from "@aswincloud/auth";
 import { getUserById } from "./db";
+import { userIdForApiKey, API_KEY_PREFIX } from "./api-keys";
 
 export const SESSION_COOKIE_NAME = "shiptrack_session";
 const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
@@ -68,4 +69,27 @@ function cookieHeader(value: string, maxAgeSeconds: number): string {
     `Max-Age=${maxAgeSeconds}`,
   ];
   return parts.join("; ");
+}
+
+// The account behind a request: the session cookie, or a personal API key sent
+// as "Authorization: Bearer st_…". Returns
+//   { userId, via }  when either authenticates,
+//   null             when the request carries neither (a signed-out visitor),
+//   "invalid"        when it offers an st_ key that is unknown or revoked.
+// A bad key is an error, not a downgrade to signed-out: falling through would
+// turn a typo'd key into a silent guest request.
+//
+// Other Bearer tokens (the operator's ADMIN_TOKEN) are left to the caller.
+export async function readCaller(
+  secret: string,
+  db: D1Database,
+  req: NextRequest,
+): Promise<{ userId: string; via: "session" | "api_key" } | null | "invalid"> {
+  const sess = await readSession(secret, req);
+  if (sess) return { userId: sess.userId, via: "session" };
+  const auth = req.headers.get("authorization") ?? "";
+  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!bearer.startsWith(API_KEY_PREFIX)) return null;
+  const userId = await userIdForApiKey(db, bearer);
+  return userId ? { userId, via: "api_key" } : "invalid";
 }
