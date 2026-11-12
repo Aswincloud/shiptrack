@@ -24,6 +24,15 @@ interface WhatsAppStatus {
   otp: { phoneDisplay: string; expiresAt: number } | null;
 }
 
+interface ApiKeySummary {
+  id: string;
+  name: string;
+  prefix: string;
+  created_at: number;
+  last_used_at: number | null;
+  revoked_at: number | null;
+}
+
 interface Props {
   email: string;
   name: string | null;
@@ -31,6 +40,9 @@ interface Props {
   hasPassword: boolean;
   createdAt: number;
   whatsapp: WhatsAppStatus;
+  apiKeys: ApiKeySummary[];
+  maxApiKeys: number;
+  appUrl: string;
 }
 
 export function SettingsClient(props: Props) {
@@ -50,6 +62,7 @@ export function SettingsClient(props: Props) {
         isAdmin={props.isAdmin}
       />
       {props.whatsapp.otpAvailable && <WhatsAppSection initial={props.whatsapp} />}
+      <ApiKeysSection initial={props.apiKeys} max={props.maxApiKeys} appUrl={props.appUrl} />
       <PasswordSection hasPassword={props.hasPassword} />
       <DangerSection hasPassword={props.hasPassword} />
 
@@ -680,6 +693,182 @@ function otpErrorText(error: string | undefined, j: { retryAfter?: number; attem
   }
 }
 
+
+function fmtDate(epoch: number): string {
+  return new Date(epoch * 1000).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// Create, list and revoke personal API keys. Everything here uses the session
+// cookie (fetch sends it automatically); a key can never manage keys.
+function ApiKeysSection({ initial, max, appUrl }: { initial: ApiKeySummary[]; max: number; appUrl: string }) {
+  const [keys, setKeys] = useState<ApiKeySummary[]>(initial);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState<{ key: string; name: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [feedback, setFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const active = keys.filter((k) => !k.revoked_at);
+  const atLimit = active.length >= max;
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setFeedback(null);
+    const res = await fetch("/api/api-keys", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed }),
+    });
+    const j = (await res.json().catch(() => ({}))) as ApiKeySummary & { key?: string; error?: string; message?: string };
+    setBusy(false);
+    if (res.ok && j.key) {
+      setCreated({ key: j.key, name: j.name });
+      setCopied(false);
+      setKeys((ks) => [{ id: j.id, name: j.name, prefix: j.prefix, created_at: j.created_at, last_used_at: null, revoked_at: null }, ...ks]);
+      setName("");
+      return;
+    }
+    setFeedback({ kind: "err", text: j.message || "Couldn't create the key. Try again." });
+  }
+
+  async function revoke(id: string, keyName: string) {
+    if (!confirm(`Revoke "${keyName}"? Any script using it stops working immediately.`)) return;
+    setBusy(true);
+    const res = await fetch(`/api/api-keys/${encodeURIComponent(id)}`, { method: "DELETE" });
+    setBusy(false);
+    if (res.ok || res.status === 204) {
+      setKeys((ks) => ks.map((k) => (k.id === id ? { ...k, revoked_at: Math.floor(Date.now() / 1000) } : k)));
+      setFeedback({ kind: "ok", text: `"${keyName}" revoked.` });
+    } else {
+      setFeedback({ kind: "err", text: "Couldn't revoke that key. Try again." });
+    }
+  }
+
+  async function copyKey() {
+    if (!created) return;
+    try {
+      await navigator.clipboard.writeText(created.key);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <section style={{ ...cardStyle, marginBottom: 20 }}>
+      <h2 style={sectionTitle}>API keys</h2>
+      <p style={{ margin: "0 0 14px", fontSize: 14, color: "var(--muted)" }}>
+        Add and manage your watches from a script. Send the key as{" "}
+        <code style={codeStyle}>Authorization: Bearer st_…</code> to{" "}
+        <code style={codeStyle}>{appUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}/api/watches</code>. A
+        key acts as your account, so keep it secret.
+      </p>
+
+      {created && (
+        <div
+          style={{
+            ...cardStyle,
+            padding: 14,
+            marginBottom: 14,
+            background: "var(--success-bg, #ecfdf5)",
+            borderColor: "var(--success-border, #a7f3d0)",
+          }}
+        >
+          <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600 }}>
+            Copy your new key now — it&apos;s shown only once:
+          </p>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <code style={{ ...codeStyle, fontSize: 14, padding: "6px 10px", userSelect: "all", wordBreak: "break-all" }}>
+              {created.key}
+            </code>
+            <button type="button" onClick={copyKey} style={buttonGhostStyle}>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreated(null)}
+            style={{ ...buttonGhostStyle, marginTop: 10 }}
+          >
+            I&apos;ve saved it
+          </button>
+        </div>
+      )}
+
+      {active.length > 0 && (
+        <ul style={{ listStyle: "none", padding: 0, margin: "0 0 14px" }}>
+          {keys
+            .filter((k) => !k.revoked_at)
+            .map((k) => (
+              <li
+                key={k.id}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "10px 0",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                <span style={{ fontSize: 14 }}>
+                  <strong>{k.name}</strong>{" "}
+                  <code style={codeStyle}>st_{k.prefix}…</code>
+                  <br />
+                  <span style={{ color: "var(--muted)", fontSize: 12 }}>
+                    Created {fmtDate(k.created_at)} ·{" "}
+                    {k.last_used_at ? `last used ${fmtDate(k.last_used_at)}` : "never used"}
+                  </span>
+                </span>
+                <button type="button" onClick={() => revoke(k.id, k.name)} disabled={busy} style={buttonGhostStyle}>
+                  Revoke
+                </button>
+              </li>
+            ))}
+        </ul>
+      )}
+
+      {atLimit ? (
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: 0 }}>
+          You have the maximum of {max} active keys. Revoke one to create another.
+        </p>
+      ) : (
+        <form onSubmit={create} style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <label style={{ ...labelStyle, flex: "1 1 220px" }}>
+            New key name
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. order-sync script"
+              maxLength={60}
+              style={inputStyle}
+            />
+          </label>
+          <button type="submit" disabled={busy || !name.trim()} style={buttonStyle}>
+            Create key
+          </button>
+        </form>
+      )}
+
+      {feedback && (
+        <p style={{ marginTop: 12, fontSize: 13, color: feedback.kind === "ok" ? "var(--success)" : "var(--danger)" }}>
+          {feedback.text}
+        </p>
+      )}
+    </section>
+  );
+}
+
+const codeStyle: React.CSSProperties = {
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontSize: 12,
+  background: "var(--code-bg, rgba(0,0,0,0.05))",
+  padding: "1px 5px",
+  borderRadius: 4,
+};
 
 const labelStyle: React.CSSProperties = {
   display: "flex",

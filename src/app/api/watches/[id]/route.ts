@@ -13,10 +13,11 @@ import {
   MIN_POLL_INTERVAL_SECONDS,
   MAX_POLL_INTERVAL_SECONDS,
 } from "@/lib/db";
-import { readSession } from "@/lib/auth";
+import { readCaller } from "@/lib/auth";
 import { signToken } from "@/lib/tokens";
 import { sendEmail, confirmEmail } from "@/lib/email";
 import { formatPhoneForDisplay } from "@/lib/whatsapp";
+import { publicWatch } from "@/lib/watch-view";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +35,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const w = await getWatch(env.DB, id);
   if (!w) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (w.user_id) {
-    const sess = await readSession(env.TOKEN_SECRET, req);
-    if (!sess || sess.userId !== w.user_id) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const caller = await readCaller(env.TOKEN_SECRET, env.DB, req);
+    if (caller === "invalid") return NextResponse.json({ error: "invalid_api_key" }, { status: 401 });
+    if (!caller || caller.userId !== w.user_id) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return NextResponse.json({
+      ...publicWatch(w),
+      channel: w.phone || !w.email ? "whatsapp" : "email",
+      phoneDisplay: w.phone ? formatPhoneForDisplay(w.phone) : null,
+    });
   }
   return NextResponse.json({
     status: w.status,
@@ -61,8 +68,10 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (!env.DB || !env.TOKEN_SECRET) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }
-  const sess = await readSession(env.TOKEN_SECRET, req);
-  if (!sess) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const caller = await readCaller(env.TOKEN_SECRET, env.DB, req);
+  if (caller === "invalid") return NextResponse.json({ error: "invalid_api_key" }, { status: 401 });
+  if (!caller) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const sess = { userId: caller.userId };
 
   const { id } = await ctx.params;
   const ok = await cancelWatchForUser(env.DB, id, sess.userId);
@@ -75,8 +84,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   if (!env.DB || !env.TOKEN_SECRET) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });
   }
-  const sess = await readSession(env.TOKEN_SECRET, req);
-  if (!sess) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const caller = await readCaller(env.TOKEN_SECRET, env.DB, req);
+  if (caller === "invalid") return NextResponse.json({ error: "invalid_api_key" }, { status: 401 });
+  if (!caller) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const sess = { userId: caller.userId };
 
   const json = await req.json().catch(() => null);
   const parsed = PatchBody.safeParse(json);
