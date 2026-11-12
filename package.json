@@ -6,7 +6,7 @@
   "description": "Open-source shipment tracking for Indian and international couriers. Starts with Blue Dart.",
   "homepage": "https://github.com/aswin/shiptrack",
   "//deploy:web": "Cloudflare Workers Builds invokes `npm run deploy:web` as its BUILD command, on every branch — so this script must only build, never deploy. Deploying is the build trigger's own job: `wrangler deploy` on main, `wrangler versions upload` on other branches. If this script deploys, every branch push ships to production. Use `npm run deploy` for a manual full deploy.",
-  "//next": "Pinned to 16.3.x. Next 16.4 moved preview props into a standalone .next/server/preview-props.json that @opennextjs/cloudflare 1.20.x doesn't inline, so every dynamic route crashes at runtime with Cloudflare error 1101 (loadManifest preview-props) even though `next build` passes — this took prod down from #91 on 2026-10-12. Unpin to ^16.4 only once OpenNext supports it (opennextjs/opennextjs-cloudflare#1356).",
+  "//next": "Keep next and @opennextjs/cloudflare in step. Next 16.4 moved preview props into a standalone .next/server/preview-props.json; OpenNext < 1.20.12 didn't inline it, so every dynamic route crashed at runtime (Cloudflare 1101) though `next build` passed — this took prod down on 2026-10-12 and forced a 16.3.x pin. OpenNext 1.20.12 fixed it (opennextjs/opennextjs-cloudflare#1356) and 1.20.16+ requires Next >= 16.4.5, so we now track ^16.4 with OpenNext ^1.20.17. A Next/OpenNext bump still passes `next build` while failing at runtime, so always boot a dynamic route before merging one.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -26,22 +26,22 @@
   },
   "dependencies": {
     "@aswincloud/auth": "^0.5.0",
-    "@opennextjs/cloudflare": "^1.20.9",
-    "next": "~16.3.8",
-    "react": "^19.2.8",
-    "react-dom": "^19.3.0",
+    "@opennextjs/cloudflare": "^1.20.17",
+    "next": "^16.4.6",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261008.1",
-    "@types/node": "^26.6.4",
+    "@cloudflare/workers-types": "^5.20261029.1",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.3.0",
     "eslint": "^9.39.4",
-    "eslint-config-next": "^16.4.0",
+    "eslint-config-next": "^16.4.6",
     "typescript": "^5.7.0",
     "vitest": "^3.2.4",
-    "wrangler": "4.149.0"
+    "wrangler": "4.160.1"
   },
   "//overrides": "sharp <0.35.4 is a transitive dev-only dep (wrangler -> miniflare) flagged by GHSA-rgj7-g3m4-5g8c (libheif). next already resolves 0.35.4; this forces miniflare's nested copy up to match. Remove once wrangler ships a miniflare with sharp >=0.35.4.",
   "overrides": {
