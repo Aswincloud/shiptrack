@@ -1,6 +1,11 @@
 # ShipTrack
 
-Free, open-source shipment tracking for Indian and international couriers. Built with Next.js + TypeScript.
+**Use it now: [shiptrack.aswincloud.com](https://shiptrack.aswincloud.com)**, free, no install or hosting needed.
+
+Free, open-source shipment tracking for Indian and international couriers. Paste a
+tracking number to see its scans, or sign up to get email and WhatsApp alerts as the
+parcel moves. On a phone, use your browser's "Add to Home screen" to install it like an
+app. Built with Next.js + TypeScript; self-hosting is optional (see [Quick start](#quick-start)).
 
 Currently supports:
 
@@ -11,6 +16,7 @@ Currently supports:
 - **Amazon Shipping** (India)
 - **Ekart** (India — Flipkart's courier)
 - **Shiprocket** (couriers shipped via Shiprocket)
+- **DTDC** (link only: opens DTDC's own tracking page, no live status or alerts yet)
 
 More carriers coming — contributions welcome.
 
