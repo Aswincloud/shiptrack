@@ -40,11 +40,13 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.4.6",
     "typescript": "^5.7.0",
-    "vitest": "^3.2.4",
+    "vitest": "^4.1.12",
     "wrangler": "4.160.1"
   },
-  "//overrides": "sharp <0.35.4 is a transitive dev-only dep (wrangler -> miniflare) flagged by GHSA-rgj7-g3m4-5g8c (libheif). next already resolves 0.35.4; this forces miniflare's nested copy up to match. Remove once wrangler ships a miniflare with sharp >=0.35.4.",
+  "//overrides": "All three are transitive build/dev-only deps (never in the deployed Worker), forced up to clear Dependabot alerts the parents haven't released a fix for yet. sharp: wrangler -> miniflare, GHSA-rgj7-g3m4-5g8c (libheif). undici: wrangler -> miniflare, several 7.x advisories fixed in 7.30.1. body-parser: @opennextjs/cloudflare -> aws -> express, DoS GHSA fixed in 2.4.0. Drop each once its parent ships a release that resolves a safe version on its own.",
   "overrides": {
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "undici": "^7.30.1",
+    "body-parser": "^2.4.0"
   }
 }
