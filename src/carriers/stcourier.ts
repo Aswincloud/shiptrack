@@ -1,5 +1,6 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
 import { carryForwardStatus, overallStatus, stripTags, isFailedAttempt } from "./normalize";
+import { validTrackingNumber } from "./validate";
 
 // ST Courier (stcourier.com) publishes no developer API — no docs, no keys, no
 // portal. Their own site tracks via a two-step CodeIgniter flow that we
@@ -158,7 +159,7 @@ export const stcourier: Carrier = {
   async track(trackingNumber: string): Promise<TrackingResult> {
     const cleaned = trackingNumber.trim();
     // Their form caps input at 11 chars and the server rejects non-digits.
-    if (!/^[0-9]{6,11}$/.test(cleaned)) {
+    if (!validTrackingNumber("stcourier", cleaned)) {
       throw new CarrierError("Invalid ST Courier AWB format.", "invalid_input", 400);
     }
 

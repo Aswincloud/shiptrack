@@ -1,6 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "shiptrack-poller",
+  // Only the custom domain serves traffic. The default *.workers.dev and
+  // preview URLs would bypass the zone's WAF and rate-limit rules.
+  "workers_dev": false,
+  "preview_urls": false,
   "main": "workers/poller/index.ts",
   "compatibility_date": "2025-03-25",
   "compatibility_flags": [

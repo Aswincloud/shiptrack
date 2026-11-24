@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { confirmWatch, getWatch } from "@/lib/db";
 import { verifyToken } from "@/lib/tokens";
+import { parseConfirmSubject } from "@/lib/watch-confirm";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,18 @@ export async function GET(req: NextRequest) {
   };
   if (!e.DB || !e.TOKEN_SECRET) return page("Not configured", "<p>Server not configured.</p>", 503);
 
-  const watchId = await verifyToken(e.TOKEN_SECRET, token, "confirm");
-  if (!watchId) return page("Invalid or expired link", "<p>This link is no longer valid.</p>", 400);
+  const subject = await verifyToken(e.TOKEN_SECRET, token, "confirm");
+  const parsed = subject ? parseConfirmSubject(subject) : null;
+  if (!parsed) return page("Invalid or expired link", "<p>This link is no longer valid.</p>", 400);
+  const { watchId } = parsed;
 
   const watch = await getWatch(e.DB, watchId);
   if (!watch) return page("Not found", "<p>Watch not found.</p>", 404);
+  // The link only confirms the address it was sent to. If the watch has since
+  // been pointed elsewhere, this older link mustn't activate it for that address.
+  if (watch.email.toLowerCase() !== parsed.email) {
+    return page("Invalid or expired link", "<p>This link is no longer valid. Request a new confirmation.</p>", 400);
+  }
 
   if (watch.status === "active") {
     return page(
@@ -40,7 +48,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const ok = await confirmWatch(e.DB, watchId);
+  const ok = await confirmWatch(e.DB, watchId, parsed.email);
   if (!ok) return page("Could not confirm", "<p>This watch could not be activated.</p>", 400);
 
   return page(

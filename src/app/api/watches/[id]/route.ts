@@ -18,6 +18,7 @@ import { signToken } from "@/lib/tokens";
 import { sendEmail, confirmEmail } from "@/lib/email";
 import { formatPhoneForDisplay } from "@/lib/whatsapp";
 import { publicWatch } from "@/lib/watch-view";
+import { confirmSubject } from "@/lib/watch-confirm";
 
 export const dynamic = "force-dynamic";
 
@@ -135,7 +136,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   const watch = await getWatchForUser(env.DB, id, sess.userId);
   const appUrl = env.APP_URL.replace(/\/$/, "");
-  const confirmToken = await signToken(env.TOKEN_SECRET, id, "confirm", CONFIRM_TTL_SECONDS);
+  const confirmToken = await signToken(env.TOKEN_SECRET, confirmSubject(id, nextEmail), "confirm", CONFIRM_TTL_SECONDS);
   const confirmUrl = `${appUrl}/api/watches/confirm?token=${encodeURIComponent(confirmToken)}`;
   const tpl = confirmEmail({
     appUrl: env.APP_URL,

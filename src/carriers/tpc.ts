@@ -1,5 +1,6 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult, TrackOptions } from "./types";
 import { carryForwardStatus, overallStatus, isFailedAttempt } from "./normalize";
+import { validTrackingNumber } from "./validate";
 
 // The Professional Couriers (tpcindia.com) publishes no developer API. Their
 // website's search now posts to /CaptchaGate.aspx, and the old
@@ -176,7 +177,7 @@ export const tpc: Carrier = {
     // PON8334106 (the WayNo bag references in the feed do *not* resolve). Keep
     // the check loose — TPC treats anything unknown as "no scans" anyway.
     const cleaned = trackingNumber.trim().toUpperCase();
-    if (!/^[A-Z0-9]{6,20}$/.test(cleaned)) {
+    if (!validTrackingNumber("tpc", cleaned)) {
       throw new CarrierError("Invalid Professional Couriers consignment number format.", "invalid_input", 400);
     }
 

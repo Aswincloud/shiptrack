@@ -199,13 +199,17 @@ export function confirmEmail(args: {
   trackingNumber: string;
   label?: string | null;
 }): { subject: string; html: string; text: string } {
-  const subject = `Confirm your ShipTrack alert for ${args.trackingNumber}`;
+  // This goes to an address that hasn't agreed to anything yet, possibly not
+  // the requester's. So it carries nothing the requester can phrase: a fixed
+  // subject, no label, and only a tracking number that already passed its
+  // carrier's format check.
+  const subject = "Confirm your ShipTrack shipment alert";
   const html = shell({
     preheader: "Confirm to start receiving status alerts for this shipment.",
     heading: "Confirm your alert",
     bodyHtml: `
       <p style="margin:0 0 16px;">You'll get an email whenever the status of this shipment changes.</p>
-      ${shipmentCard(args)}
+      ${shipmentCard({ carrier: args.carrier, trackingNumber: args.trackingNumber, label: null })}
       ${button(args.confirmUrl, "Confirm alert")}
       <p style="margin:18px 0 0;color:#94a3b8;font-size:13px;">Didn't request this? You can safely ignore this email.</p>
     `,
@@ -398,6 +402,32 @@ export function passwordResetEmail(args: {
     `,
   });
   const text = `Reset your ShipTrack password: ${args.resetUrl} (expires in ${args.ttlHours}h)`;
+  return { subject, html, text };
+}
+
+// Sent to the OLD address once an email change has been confirmed, so the owner
+// learns about a change they didn't make (e.g. from a stolen session) and can
+// act. The new address is shown so they can tell whether it was them.
+export function emailChangedNoticeEmail(args: {
+  newEmail: string;
+  appUrl: string;
+}): { subject: string; html: string; text: string } {
+  const subject = "Your ShipTrack email was changed";
+  const app = args.appUrl.replace(/\/$/, "");
+  const html = shell({
+    preheader: "Your ShipTrack login email was just changed.",
+    heading: "Your login email was changed",
+    accent: "#dc2626",
+    bodyHtml: `
+      <p style="margin:0 0 14px;">The login email for your ShipTrack account was changed to <strong>${escapeHtml(
+        args.newEmail,
+      )}</strong>.</p>
+      <p style="margin:0 0 14px;">If this was you, there's nothing to do.</p>
+      <p style="margin:0;">If it wasn't, reply to this email straight away so we can lock the account and restore your address.</p>
+      ${button(`${app}/login`, "Open ShipTrack")}
+    `,
+  });
+  const text = `Your ShipTrack login email was changed to ${args.newEmail}. If this wasn't you, reply to this email straight away.`;
   return { subject, html, text };
 }
 

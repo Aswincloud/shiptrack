@@ -14,8 +14,10 @@ export const dynamic = "force-dynamic";
 
 // Admin-only: renders each email template with sample data and sends them to
 // the admin's own address so the design can be reviewed in a real inbox.
-// GET /api/admin/test-email?type=status|otp|watch|reset|all
-export async function GET(req: NextRequest) {
+// POST /api/admin/test-email?type=status|otp|watch|reset|all
+// POST, not GET: it sends email, and a GET could be triggered by a link or an
+// <img> on another site while an admin is signed in (SameSite=Lax allows that).
+export async function POST(req: NextRequest) {
   const env = getEnv();
   if (!env.DB || !env.TOKEN_SECRET || !env.RESEND_API_KEY || !env.RESEND_FROM) {
     return NextResponse.json({ error: "not_configured" }, { status: 503 });

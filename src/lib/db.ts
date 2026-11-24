@@ -228,12 +228,18 @@ export async function listWatchesByUser(db: D1Database, userId: string): Promise
   return res.results ?? [];
 }
 
-export async function confirmWatch(db: D1Database, id: string): Promise<boolean> {
+// `email`, when given, makes the activation conditional on the watch still
+// pointing at that address, so a confirm link can't activate a watch whose
+// address changed between the caller's check and this write.
+export async function confirmWatch(db: D1Database, id: string, email?: string): Promise<boolean> {
   const now = Math.floor(Date.now() / 1000);
-  const res = await db
-    .prepare(`UPDATE watches SET status='active', confirmed_at=? WHERE id=? AND status='pending'`)
-    .bind(now, id)
-    .run();
+  const stmt =
+    email === undefined
+      ? db.prepare(`UPDATE watches SET status='active', confirmed_at=? WHERE id=? AND status='pending'`).bind(now, id)
+      : db
+          .prepare(`UPDATE watches SET status='active', confirmed_at=? WHERE id=? AND status='pending' AND lower(email)=?`)
+          .bind(now, id, email.toLowerCase());
+  const res = await stmt.run();
   return (res.meta?.changes ?? 0) > 0;
 }
 
@@ -264,6 +270,14 @@ export async function countOpenWatchesForUser(db: D1Database, userId: string): P
 // so treating it as "open" would answer every retry with "already emailed you"
 // and lock that address out of that shipment for good. Guest tokens are signed
 // at creation, so created_at is the link's issue time.
+// Confirmation links issued before this moment signed only the watch id, and
+// the confirm route no longer accepts them. A pending guest row from before
+// then can't be confirmed, so it mustn't count as "a link is already on its
+// way" — a repeat request gets a fresh, address-bound link instead. Set a
+// little after the deploy of the address-bound links (2026-11-25 00:00 UTC);
+// a row created just before that gets one extra, harmless email.
+export const ADDRESS_BOUND_CONFIRM_SINCE = 1795564800;
+
 export async function findOpenGuestWatch(
   db: D1Database,
   email: string,
@@ -279,7 +293,7 @@ export async function findOpenGuestWatch(
        ORDER BY created_at DESC
        LIMIT 1`,
     )
-    .bind(email, carrier, trackingNumber, now - CONFIRM_TTL_SECONDS)
+    .bind(email, carrier, trackingNumber, Math.max(now - CONFIRM_TTL_SECONDS, ADDRESS_BOUND_CONFIRM_SINCE))
     .first<WatchRow>();
   return row ?? null;
 }
@@ -968,17 +982,33 @@ export async function countPhoneOtpSendsForPhoneSince(db: D1Database, phone: str
   return row?.n ?? 0;
 }
 
-/** Drop expired codes and the send log behind the daily limits once it is a day old. */
+/** Drop expired codes, and the send log and rate_events behind the limits once a day old. */
 export async function purgeExpiredPhoneOtps(db: D1Database, now: number): Promise<void> {
   await db.batch([
     db.prepare(`DELETE FROM phone_otp_codes WHERE expires_at < ?`).bind(now),
     db.prepare(`DELETE FROM guest_phone_otp_codes WHERE expires_at < ?`).bind(now),
     db.prepare(`DELETE FROM phone_otp_sends WHERE created_at < ?`).bind(now - 24 * 60 * 60),
+    db.prepare(`DELETE FROM rate_events WHERE created_at < ?`).bind(now - 24 * 60 * 60),
   ]);
 }
 
 export async function markEmailVerified(db: D1Database, userId: string): Promise<void> {
   await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = ?`).bind(userId).run();
+}
+
+/**
+ * A provider has just proved this address belongs to the person signing in,
+ * but the account was never verified — so whoever registered it (and set its
+ * password) may not be them. Verify it and replace the password with the
+ * OAuth-only sentinel in one statement, so a password planted by an attacker
+ * who pre-registered the email stops working. The changed password also
+ * changes the security stamp, signing out any session they held.
+ */
+export async function claimUnverifiedForOAuth(db: D1Database, userId: string, oauthOnlyHash: string): Promise<void> {
+  await db
+    .prepare(`UPDATE users SET email_verified = 1, password_hash = ? WHERE id = ? AND email_verified != 1`)
+    .bind(oauthOnlyHash, userId)
+    .run();
 }
 
 // Email change is now self-service (token-verified) via @aswincloud/auth/d1;

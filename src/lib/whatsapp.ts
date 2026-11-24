@@ -403,3 +403,15 @@ export function parseInboundMessages(payload: unknown): InboundMessage[] {
   }
   return out;
 }
+
+
+/**
+ * A phone number shortened for logs: country code + last 4 digits
+ * ("91******3210"), enough to tell numbers apart when debugging without
+ * keeping full numbers in the log store.
+ */
+export function maskPhone(phone: string | null | undefined): string {
+  const d = String(phone ?? "").replace(/\D/g, "");
+  if (d.length <= 6) return "***";
+  return `${d.slice(0, 2)}${"*".repeat(d.length - 6)}${d.slice(-4)}`;
+}

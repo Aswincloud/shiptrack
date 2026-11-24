@@ -1,5 +1,6 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
 import { carryForwardStatus, overallStatus, stripTags, isFailedAttempt } from "./normalize";
+import { validTrackingNumber } from "./validate";
 
 // Blue Dart's commercial "Tracking API" requires customer credentials (LoginID
 // and a tracking-API License Key) issued by a Blue Dart account manager. They
@@ -102,7 +103,7 @@ export const bluedart: Carrier = {
   name: "Blue Dart",
   async track(trackingNumber: string): Promise<TrackingResult> {
     const cleaned = trackingNumber.trim();
-    if (!/^[0-9]{6,20}$/.test(cleaned)) {
+    if (!validTrackingNumber("bluedart", cleaned)) {
       throw new CarrierError("Invalid Blue Dart tracking number format.", "invalid_input", 400);
     }
 

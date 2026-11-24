@@ -1,5 +1,6 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
 import { carryForwardStatus, overallStatus } from "./normalize";
+import { validTrackingNumber } from "./validate";
 
 // Amazon Shipping (India) — track.amazon.in. No credentials. The public tracker
 // SPA loads `GET /api/tracker/<id>` (the same call this carrier makes). Nested
@@ -161,7 +162,7 @@ export const amazon: Carrier = {
   name: "Amazon Shipping",
   async track(trackingNumber: string): Promise<TrackingResult> {
     const cleaned = trackingNumber.trim();
-    if (!/^[0-9]{10,18}$/.test(cleaned)) {
+    if (!validTrackingNumber("amazon", cleaned)) {
       throw new CarrierError("Invalid Amazon Shipping tracking ID format.", "invalid_input", 400);
     }
 

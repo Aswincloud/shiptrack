@@ -5,6 +5,7 @@ import { getUserByEmail, listAdminEmails } from "@/lib/db";
 import { signup } from "@aswincloud/auth/d1";
 import { makeSendEmail, emailAllowedForSite } from "@/lib/authpkg";
 import { sendEmail, otpEmail, newSignupAdminEmail } from "@/lib/email";
+import { LIMITS, RATE_LIMITED, clientIp, takeAll } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,12 @@ export async function POST(req: NextRequest) {
   // so a disallowed email reveals nothing about existing accounts.
   if (!emailAllowedForSite(env, email)) {
     return NextResponse.json({ error: "not_allowed" }, { status: 403 });
+  }
+
+  // Every signup can send a code email; cap per address and per IP so it
+  // can't be used to flood someone's inbox from our domain.
+  if (!(await takeAll(env.DB, [[`send:ip:${clientIp(req)}`, LIMITS.sendPerIp], [`send:email:${email}`, LIMITS.sendPerEmail]]))) {
+    return NextResponse.json(RATE_LIMITED, { status: 429 });
   }
 
   // Anti-enumeration: a verified account already exists → generic pending, no
@@ -66,7 +73,7 @@ export async function POST(req: NextRequest) {
           sendEmail(
             { RESEND_API_KEY: env.RESEND_API_KEY, RESEND_FROM: env.RESEND_FROM, APP_URL: env.APP_URL },
             { to, ...adminTpl },
-          ).catch((err) => console.warn(`admin notify failed for ${to}:`, err)),
+          ).catch((err) => console.warn("admin signup notify failed:", err instanceof Error ? err.message : err)),
         ),
       );
     } catch (err) {

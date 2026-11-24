@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getEnv } from "@/lib/env";
 import { readSession } from "@/lib/auth";
 import { changePassword } from "@aswincloud/auth/d1";
+import { revokeAllApiKeys } from "@/lib/api-keys";
 
 export const dynamic = "force-dynamic";
 
@@ -36,5 +37,9 @@ export async function POST(req: NextRequest) {
     if (r.error === "invalid_credentials") return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
     return NextResponse.json({ error: "invalid_input" }, { status: 400 }); // weak_password
   }
+  // The new password changes the security stamp, which signs out every other
+  // session. API keys don't use sessions, so revoke them too: a changed
+  // password usually means the old one leaked.
+  await revokeAllApiKeys(env.DB, sess.userId);
   return NextResponse.json({ status: "ok" });
 }

@@ -1,5 +1,6 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
 import { carryForwardStatus, overallStatus, stripTags, isFailedAttempt } from "./normalize";
+import { validTrackingNumber } from "./validate";
 
 // Shiprocket is a shipping aggregator. Its public tracking page resolves any
 // AWB to its underlying courier (Blue Dart, Delhivery, Ekart, XpressBees, …)
@@ -87,7 +88,7 @@ export const shiprocket: Carrier = {
   name: "Shiprocket",
   async track(trackingNumber: string): Promise<TrackingResult> {
     const cleaned = trackingNumber.trim();
-    if (!/^[A-Za-z0-9-]{6,30}$/.test(cleaned)) {
+    if (!validTrackingNumber("shiprocket", cleaned)) {
       throw new CarrierError("Invalid tracking number format.", "invalid_input", 400);
     }
 

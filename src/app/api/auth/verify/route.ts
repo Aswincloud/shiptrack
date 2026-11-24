@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getEnv } from "@/lib/env";
 import { verifyOtp } from "@aswincloud/auth/d1";
 import { createSessionCookie } from "@/lib/auth";
+import { LIMITS, RATE_LIMITED, clientIp, recordEvent, take, underLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   }
 
+  // The library caps guesses per code; this also caps how many codes one IP
+  // can work through.
+  if (!(await take(env.DB, `verify:ip:${clientIp(req)}`, LIMITS.verifyPerIp))) {
+    return NextResponse.json(RATE_LIMITED, { status: 429 });
+  }
+
   const r = await verifyOtp(env.DB, {
     email: parsed.data.email.toLowerCase(),
     code: parsed.data.code,
@@ -34,7 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: r.error }, { status });
   }
 
-  const cookie = await createSessionCookie(env.TOKEN_SECRET, r.userId);
+  const cookie = await createSessionCookie(env.TOKEN_SECRET, r.userId, env.DB);
   return NextResponse.json(
     { userId: r.userId, email: r.email },
     { status: 200, headers: { "Set-Cookie": cookie } },

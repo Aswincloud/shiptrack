@@ -7,6 +7,7 @@ import {
   TrackOptions,
 } from "./types";
 import { carryForwardStatus, overallStatus, isFailedAttempt } from "./normalize";
+import { validTrackingNumber } from "./validate";
 
 // Delhivery is tracked from two sources, best-first.
 //
@@ -311,7 +312,7 @@ export const delhivery: Carrier = {
   name: "Delhivery",
   async track(trackingNumber: string, opts?: TrackOptions): Promise<TrackingResult> {
     const cleaned = trackingNumber.trim();
-    if (!/^[0-9]{8,20}$/.test(cleaned)) {
+    if (!validTrackingNumber("delhivery", cleaned)) {
       throw new CarrierError("Invalid Delhivery waybill format.", "invalid_input", 400);
     }
 
