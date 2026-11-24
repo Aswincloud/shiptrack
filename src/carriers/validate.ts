@@ -14,14 +14,20 @@ const FORMATS: Record<string, { pattern: RegExp; upper?: boolean }> = {
   tpc: { pattern: /^[A-Z0-9]{6,20}$/, upper: true },
 };
 
+// Own keys only, so an inherited name like "constructor" is an unknown carrier.
+function formatFor(carrier: string): { pattern: RegExp; upper?: boolean } | undefined {
+  const key = carrier.toLowerCase();
+  return Object.prototype.hasOwnProperty.call(FORMATS, key) ? FORMATS[key] : undefined;
+}
+
 /** The carrier's normalised form of a tracking number. */
 export function normaliseTrackingNumber(carrier: string, trackingNumber: string): string {
   const t = trackingNumber.trim();
-  return FORMATS[carrier.toLowerCase()]?.upper ? t.toUpperCase() : t;
+  return formatFor(carrier)?.upper ? t.toUpperCase() : t;
 }
 
 /** True when the number matches the carrier's format. Unknown carriers fail. */
 export function validTrackingNumber(carrier: string, trackingNumber: string): boolean {
-  const f = FORMATS[carrier.toLowerCase()];
+  const f = formatFor(carrier);
   return !!f && f.pattern.test(normaliseTrackingNumber(carrier, trackingNumber));
 }

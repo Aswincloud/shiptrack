@@ -52,6 +52,12 @@ export function makeFakeDb() {
     if (q.startsWith("SELECT COUNT(*) AS n FROM rate_events")) {
       return { first: { n: events.filter((e) => e.key === a[0] && e.created_at >= (a[1] as number)).length } };
     }
+    if (q.startsWith("INSERT INTO rate_events (key, created_at) SELECT")) {
+      const [key, now, , since, max] = a as [string, number, string, number, number];
+      const n = events.filter((e) => e.key === key && e.created_at >= since).length;
+      if (n < max) { events.push({ key, created_at: now }); return { changes: 1 }; }
+      return { changes: 0 };
+    }
     if (q.startsWith("INSERT INTO rate_events")) { events.push({ key: a[0] as string, created_at: a[1] as number }); return {}; }
     throw new Error(`fake-d1: unhandled SQL: ${q}`);
   }

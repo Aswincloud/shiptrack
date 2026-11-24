@@ -4,10 +4,10 @@ import { getEnv } from "@/lib/env";
 import { getUserByEmail } from "@/lib/db";
 import { verifyPasswordOrDummy } from "@aswincloud/auth/d1";
 import { resendOtp } from "@aswincloud/auth/d1";
-import { createSessionCookie } from "@/lib/auth";
+import { createSessionCookieForUser } from "@/lib/auth";
 import { makeSendEmail } from "@/lib/authpkg";
 import { otpEmail } from "@/lib/email";
-import { LIMITS, RATE_LIMITED, clientIp, recordEvent, take, underLimit } from "@/lib/rate-limit";
+import { LIMITS, RATE_LIMITED, clientIp, recordEvent, takeAll, underLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +49,10 @@ export async function POST(req: NextRequest) {
 
   if (user.email_verified !== 1) {
     // Correct password but unverified: send a fresh OTP and route to /verify.
+    // Spends the same per-address and per-IP send budget as resend-otp, so
+    // someone holding the password can't send unlimited code emails.
     const sendEmailFn = makeSendEmail(env);
-    if (sendEmailFn) {
+    if (sendEmailFn && (await takeAll(env.DB, [[`send:ip:${clientIp(req)}`, LIMITS.sendPerIp], [`send:email:${email}`, LIMITS.sendPerEmail]]))) {
       // Normal resend cooldown: without it, anyone holding the password could
       // send unlimited code emails by retrying the login.
       await resendOtp(env.DB, {
@@ -63,7 +65,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ requiresVerification: true, email }, { status: 403 });
   }
 
-  const cookie = await createSessionCookie(env.TOKEN_SECRET, user.id, env.DB);
+  const cookie = await createSessionCookieForUser(env.TOKEN_SECRET, user);
   return NextResponse.json(
     { userId: user.id, email: user.email },
     { status: 200, headers: { "Set-Cookie": cookie } },

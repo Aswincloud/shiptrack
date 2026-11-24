@@ -27,7 +27,7 @@ import {
   type InboundMessage,
   maskPhone,
 } from "@/lib/whatsapp";
-import { LIMITS, recordEvent, underLimit } from "@/lib/rate-limit";
+import { LIMITS, recordEvent, take, underLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -90,6 +90,10 @@ export async function POST(req: NextRequest) {
   );
   for (const m of messages) {
     try {
+      // Meta (and the relay in front of our shared number) redelivers messages.
+      // Handle each message id once, so a redelivered wrong code doesn't spend
+      // the sender's guess budget twice and nothing gets answered twice.
+      if (m.id && !(await take(env.DB, `wa-msg:${m.id}`, { max: 1, windowSec: 24 * 60 * 60 }))) continue;
       await handleInbound(env, m);
     } catch (err) {
       // Never let one message fail the batch — Meta would redeliver all of them.

@@ -5,7 +5,7 @@ import { getUserByEmail, listAdminEmails } from "@/lib/db";
 import { signup } from "@aswincloud/auth/d1";
 import { makeSendEmail, emailAllowedForSite } from "@/lib/authpkg";
 import { sendEmail, otpEmail, newSignupAdminEmail } from "@/lib/email";
-import { LIMITS, RATE_LIMITED, clientIp, recordEvent, take, underLimit } from "@/lib/rate-limit";
+import { LIMITS, RATE_LIMITED, clientIp, takeAll } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   // Every signup can send a code email; cap per address and per IP so it
   // can't be used to flood someone's inbox from our domain.
-  if (!(await take(env.DB, `send:email:${email}`, LIMITS.sendPerEmail)) || !(await take(env.DB, `send:ip:${clientIp(req)}`, LIMITS.sendPerIp))) {
+  if (!(await takeAll(env.DB, [[`send:ip:${clientIp(req)}`, LIMITS.sendPerIp], [`send:email:${email}`, LIMITS.sendPerEmail]]))) {
     return NextResponse.json(RATE_LIMITED, { status: 429 });
   }
 

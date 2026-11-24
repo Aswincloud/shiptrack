@@ -13,6 +13,12 @@ describe("registry", () => {
   it("returns undefined for an unknown carrier", () => {
     expect(getCarrier("fedex")).toBeUndefined();
   });
+
+  it("never resolves inherited Object properties", () => {
+    for (const name of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+      expect(getCarrier(name)).toBeUndefined();
+    }
+  });
 });
 
 describe("detectCarriers", () => {

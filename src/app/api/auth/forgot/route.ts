@@ -4,7 +4,7 @@ import { getEnv } from "@/lib/env";
 import { requestPasswordReset } from "@aswincloud/auth/d1";
 import { makeSendEmail } from "@/lib/authpkg";
 import { passwordResetEmail } from "@/lib/email";
-import { LIMITS, RATE_LIMITED, clientIp, recordEvent, take, underLimit } from "@/lib/rate-limit";
+import { LIMITS, clientIp, takeAll } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +26,7 @@ export async function POST(req: NextRequest) {
   // Cap reset emails per address and per IP. Over the limit we still answer
   // 200 (anti-enumeration) but send nothing.
   const email = parsed.data.email.toLowerCase();
-  const allowed =
-    (await take(env.DB, `send:email:${email}`, LIMITS.sendPerEmail)) &&
-    (await take(env.DB, `send:ip:${clientIp(req)}`, LIMITS.sendPerIp));
+  const allowed = await takeAll(env.DB, [[`send:ip:${clientIp(req)}`, LIMITS.sendPerIp], [`send:email:${email}`, LIMITS.sendPerEmail]]);
   const sendEmailFn = makeSendEmail(env);
   if (sendEmailFn && allowed) {
     // Flow always resolves { ok: true } and swallows send errors (anti-enumeration).

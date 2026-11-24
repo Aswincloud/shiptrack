@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const ok = await confirmWatch(e.DB, watchId);
+  const ok = await confirmWatch(e.DB, watchId, parsed.email);
   if (!ok) return page("Could not confirm", "<p>This watch could not be activated.</p>", 400);
 
   return page(

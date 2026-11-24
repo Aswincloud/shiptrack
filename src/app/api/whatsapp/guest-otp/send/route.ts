@@ -21,6 +21,7 @@ import {
 } from "@/lib/db";
 import { formatPhoneForDisplay, normalizePhone, sendOtp, whatsappOtpConfigured, WhatsAppError } from "@/lib/whatsapp";
 import { validTrackingNumber, normaliseTrackingNumber } from "@/carriers/validate";
+import { LIMITS, take } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +63,12 @@ export async function POST(req: NextRequest) {
   const dayAgo = now - 86400;
   // Per-IP limit first, so the "already watching" answer below can't be used
   // as a free, unlimited lookup of which numbers watch which shipments.
-  if ((await countPhoneOtpSendsForUserSince(env.DB, ipKey, dayAgo)) >= MAX_GUEST_OTP_SENDS_PER_IP_PER_DAY) {
+  // Every request spends this budget, including ones that stop at
+  // "already_watching", which the send counter below never sees.
+  if (
+    !(await take(env.DB, `guest-otp:ip:${ip}`, LIMITS.guestOtpRequestPerIp)) ||
+    (await countPhoneOtpSendsForUserSince(env.DB, ipKey, dayAgo)) >= MAX_GUEST_OTP_SENDS_PER_IP_PER_DAY
+  ) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   if (await findActiveGuestWatchForPhone(env.DB, phone, carrier, trackingNumber)) {

@@ -6,8 +6,10 @@ import type { NextRequest } from "next/server";
 // inbound WhatsApp VERIFY codes. A limit is (max events, window seconds) per
 // key; the key names the limit and its subject, e.g. `login:ip:<ip>`.
 //
-// It's a soft limit — two requests at the boundary can both pass, which is
-// fine here: the aim is to make guessing and inbox-flooding slow, not exact.
+// take() reserves a slot in one statement (INSERT ... SELECT ... WHERE count <
+// max), so concurrent requests can't all slip under the limit. underLimit() +
+// recordEvent() are for counting only failures (e.g. wrong passwords), where
+// the check and the record are naturally separated by the attempt itself.
 
 export interface Limit {
   max: number;
@@ -21,6 +23,7 @@ export const LIMITS = {
   sendPerIp: { max: 15, windowSec: 60 * 60 },
   verifyPerIp: { max: 20, windowSec: 15 * 60 },
   whatsappVerifyPerSender: { max: 10, windowSec: 60 * 60 },
+  guestOtpRequestPerIp: { max: 30, windowSec: 60 * 60 }, // every request, sent or not
 } satisfies Record<string, Limit>;
 
 /** Events for `key` in the current window. */
@@ -51,8 +54,30 @@ export async function underLimit(db: D1Database, key: string, limit: Limit): Pro
  * (wrong passwords) use underLimit + recordEvent separately.
  */
 export async function take(db: D1Database, key: string, limit: Limit): Promise<boolean> {
-  if (!(await underLimit(db, key, limit))) return false;
-  await recordEvent(db, key);
+  const now = Math.floor(Date.now() / 1000);
+  const res = await db
+    .prepare(
+      `INSERT INTO rate_events (key, created_at)
+       SELECT ?, ? WHERE (SELECT COUNT(*) FROM rate_events WHERE key = ? AND created_at >= ?) < ?`,
+    )
+    .bind(key, now, key, now - limit.windowSec, limit.max)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+/**
+ * Take from several limits, checking ALL of them before consuming ANY. A
+ * request blocked by one limit (say its IP) then doesn't spend another (the
+ * target address's budget) — otherwise a blocked attacker could still use up a
+ * victim's email quota and stop their real reset emails.
+ */
+export async function takeAll(db: D1Database, limits: [key: string, limit: Limit][]): Promise<boolean> {
+  for (const [key, limit] of limits) {
+    if (!(await underLimit(db, key, limit))) return false;
+  }
+  for (const [key, limit] of limits) {
+    if (!(await take(db, key, limit))) return false;
+  }
   return true;
 }
 

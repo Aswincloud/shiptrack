@@ -308,7 +308,7 @@ one.
 
 ```bash
 # Add
-curl -X POST https://your-app.workers.dev/api/watches \
+curl -X POST https://<your-domain>/api/watches \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -363,6 +363,13 @@ npm install
 npx wrangler login
 npm run deploy
 ```
+
+Both wrangler configs set `workers_dev: false` and `preview_urls: false`, so
+the Worker has no `*.workers.dev` address. A link there would skip anything
+attached to your own zone, such as WAF rules. Before the first deploy, give the
+web Worker a custom domain (Workers & Pages → shiptrack → Settings → Domains &
+Routes, or a `routes` entry with `custom_domain: true` in `wrangler.jsonc`), and
+set `APP_URL` to it.
 
 Local Workers preview (runs the actual worker bundle):
 

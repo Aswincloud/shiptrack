@@ -28,6 +28,18 @@ export async function createSessionCookie(secret: string, userId: string, db?: D
   const dbx = db ?? (await getEnvAsync())?.DB;
   const user = dbx ? await getUserById(dbx, userId) : null;
   if (!user) throw new Error("createSessionCookie: user not found");
+  return createSessionCookieForUser(secret, user);
+}
+
+/**
+ * Session for a user row the caller already holds — login passes the exact row
+ * whose password it just verified, so the stamp can't come from a password set
+ * by a concurrent change between the check and the cookie.
+ */
+export async function createSessionCookieForUser(
+  secret: string,
+  user: { id: string; password_hash: string },
+): Promise<string> {
   const token = await signToken(secret, `${user.id}.${await securityStamp(user)}`, "session", SESSION_TTL_SECONDS);
   return cookieHeader(token, SESSION_TTL_SECONDS);
 }

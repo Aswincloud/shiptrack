@@ -7,6 +7,7 @@ import { verifyPassword } from "@aswincloud/auth";
 import { getUserById } from "@/lib/db";
 import { makeSendEmail } from "@/lib/authpkg";
 import { emailChangeConfirmEmail } from "@/lib/email";
+import { LIMITS, RATE_LIMITED, clientIp, recordEvent, underLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,16 @@ export async function POST(req: NextRequest) {
     if (!parsed.data.currentPassword) {
       return NextResponse.json({ error: "current_password_required" }, { status: 400 });
     }
+    // Same failed-guess limits as login: a stolen session mustn't become a way
+    // to brute-force the password.
+    const userKey = `login:email:${user.email.toLowerCase()}`;
+    const ipKey = `login:ip:${clientIp(req)}`;
+    if (!(await underLimit(env.DB, userKey, LIMITS.loginPerEmail)) || !(await underLimit(env.DB, ipKey, LIMITS.loginPerIp))) {
+      return NextResponse.json(RATE_LIMITED, { status: 429 });
+    }
     if (!(await verifyPassword(parsed.data.currentPassword, user.password_hash))) {
+      await recordEvent(env.DB, userKey);
+      await recordEvent(env.DB, ipKey);
       return NextResponse.json({ error: "invalid_credentials" }, { status: 401 });
     }
   }

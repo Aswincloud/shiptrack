@@ -18,7 +18,10 @@ export const carriers: Record<string, Carrier> = {
 };
 
 export function getCarrier(id: string): Carrier | undefined {
-  return carriers[id.toLowerCase()];
+  // Own keys only: a request naming "constructor" or "__proto__" must not
+  // resolve to an inherited Object property.
+  const key = id.toLowerCase();
+  return Object.prototype.hasOwnProperty.call(carriers, key) ? carriers[key] : undefined;
 }
 
 export function listCarriers(): { id: string; name: string; privateOnly?: boolean }[] {

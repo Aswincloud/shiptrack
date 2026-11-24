@@ -39,10 +39,13 @@ describe("OAuth linking (account-takeover fixes)", () => {
     expect(u.password_hash).toBe(OAUTH_ONLY_HASH);
   });
 
-  it("…and under its real (unverified) email when that's unused", async () => {
-    const r = await findOrCreateOAuthUser(fx.db, ms({ email: "new@corp.example" }), allowAll);
+  it("…and a placeholder even when the email is unused, so the real owner can't be merged into it later", async () => {
+    const r = await findOrCreateOAuthUser(fx.db, ms({ email: "new@corp.example", providerUserId: "ms-9" }), allowAll);
     if (!r.ok) throw new Error("expected ok");
-    expect(fx.users.get(r.userId)!).toMatchObject({ email: "new@corp.example", email_verified: 0 });
+    expect(fx.users.get(r.userId)!).toMatchObject({ email: "microsoft-ms-9@users.noreply.shiptrack.aswincloud.com", email_verified: 0 });
+    // The real owner then signs in with Google: they get their own new account.
+    const owner = await findOrCreateOAuthUser(fx.db, { provider: "google", providerUserId: "g-9", email: "new@corp.example", emailVerified: true }, allowAll);
+    expect(owner.ok && owner.userId).not.toBe(r.userId);
   });
 
   it("the same unverified Microsoft identity returns to its own separate account", async () => {
@@ -120,6 +123,10 @@ describe("tracking-number validation (no free text in emails)", () => {
     expect(validTrackingNumber("shiprocket", "Customs fee due, pay at evil.example/x")).toBe(false);
     expect(validTrackingNumber("stcourier", "ABC123")).toBe(false);
     expect(validTrackingNumber("nosuchcarrier", "12345678")).toBe(false);
+    // Inherited Object properties are not carriers (would throw before).
+    for (const name of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+      expect(validTrackingNumber(name, "123456")).toBe(false);
+    }
   });
   it("normalises like the carrier does", () => {
     expect(normaliseTrackingNumber("tpc", "  pon7004407 ")).toBe("PON7004407");

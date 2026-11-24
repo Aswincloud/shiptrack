@@ -64,9 +64,12 @@ export async function findOrCreateOAuthUser(
   }
 
   // 3b. Unverified email: a separate account, never matched to an existing one.
+  // It ALWAYS gets a placeholder address, even when the real one is unused:
+  // otherwise it would hold that address, and when its real owner later signed
+  // in with a verified provider they'd be linked into this account — with the
+  // unverified identity (the attacker's) still attached to it.
   if (!id.emailVerified) {
-    const taken = await getUserByEmail(db, lowerEmail);
-    const email = taken ? `${id.provider}-${id.providerUserId}@users.noreply.shiptrack.aswincloud.com` : lowerEmail;
+    const email = `${id.provider}-${id.providerUserId}@users.noreply.shiptrack.aswincloud.com`;
     if (!allowed(email)) return { ok: false, error: "not_allowed" };
     const newId = crypto.randomUUID();
     await createUser(db, { id: newId, email, passwordHash: OAUTH_ONLY_HASH }); // email_verified = 0
