@@ -24,11 +24,14 @@ import {
   MAX_POLL_INTERVAL_SECONDS,
 } from "@/lib/db";
 import { getCarrier } from "@/carriers/registry";
+import { validTrackingNumber, normaliseTrackingNumber } from "@/carriers/validate";
+import { confirmSubject } from "@/lib/watch-confirm";
 import { readCaller } from "@/lib/auth";
 import { publicWatch } from "@/lib/watch-view";
 import { signToken } from "@/lib/tokens";
 import { sendEmail, watchCreatedEmail, confirmEmail } from "@/lib/email";
 import { buildWaLink, formatPhoneForDisplay, linkMessageText, whatsappLinkingConfigured } from "@/lib/whatsapp";
+import { constantTimeEqualString } from "@aswincloud/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +87,7 @@ export async function POST(req: NextRequest) {
       // A bearer token was offered: it either matches or the request is
       // rejected. Falling through to the guest path would turn a typo'd
       // operator token into a silently downgraded request.
-      if (!env.ADMIN_TOKEN || provided !== env.ADMIN_TOKEN) {
+      if (!env.ADMIN_TOKEN || !constantTimeEqualString(provided, env.ADMIN_TOKEN)) {
         return NextResponse.json({ error: "unauthorized" }, { status: 401 });
       }
     } else {
@@ -116,10 +119,19 @@ export async function POST(req: NextRequest) {
   if (!getCarrier(carrier)) {
     return NextResponse.json({ error: "carrier_not_supported" }, { status: 400 });
   }
+  // Only a number the carrier could actually track. Besides catching typos,
+  // this stops the field being used to put arbitrary text (a phishing line,
+  // a URL) into the confirmation email we send to someone else.
+  if (!validTrackingNumber(carrier, trackingNumber)) {
+    return NextResponse.json(
+      { error: "invalid_tracking_number", message: "That doesn't look like a tracking number for this carrier." },
+      { status: 400 },
+    );
+  }
 
   const cleanedEmail = (email ?? "").toLowerCase();
   const cleanedCarrier = carrier.toLowerCase();
-  const cleanedTracking = trackingNumber.trim();
+  const cleanedTracking = normaliseTrackingNumber(carrier, trackingNumber);
   const cleanedLabel = label ?? null;
 
   if (userId) {
@@ -242,7 +254,7 @@ export async function POST(req: NextRequest) {
   const appUrl = env.APP_URL.replace(/\/$/, "");
 
   if (needsConfirmation) {
-    const confirmToken = await signToken(env.TOKEN_SECRET, id, "confirm", CONFIRM_TTL_SECONDS);
+    const confirmToken = await signToken(env.TOKEN_SECRET, confirmSubject(id, cleanedEmail), "confirm", CONFIRM_TTL_SECONDS);
     const confirmUrl = `${appUrl}/api/watches/confirm?token=${encodeURIComponent(confirmToken)}`;
     const tpl = confirmEmail({
       appUrl: env.APP_URL,

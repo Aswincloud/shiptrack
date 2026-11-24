@@ -25,7 +25,9 @@ import {
   verifyWebhookSignature,
   whatsappConfigured,
   type InboundMessage,
+  maskPhone,
 } from "@/lib/whatsapp";
+import { LIMITS, recordEvent, underLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +95,7 @@ export async function POST(req: NextRequest) {
       // Never let one message fail the batch — Meta would redeliver all of them.
       // Constant message, user-controlled values as fields: a "%s" in a sender's
       // data must never reach console's format string. (CodeQL js/tainted-format-string.)
-      console.error("whatsapp inbound failed", { id: m.id, from: m.from, error: err instanceof Error ? err.message : String(err) });
+      console.error("whatsapp inbound failed", { id: m.id, from: maskPhone(m.from), error: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -104,7 +106,7 @@ export async function POST(req: NextRequest) {
 
 async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
   if (m.text === null) {
-    console.log(`whatsapp inbound ${m.type} from ${m.from} (ignored)`);
+    console.log(`whatsapp inbound ${m.type} from ${maskPhone(m.from)} (ignored)`);
     return;
   }
   const text = m.text.trim();
@@ -113,10 +115,15 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
   // Link code first: it is the one message we actively asked the user to send.
   const code = parseLinkCode(text);
   if (code) {
+    // Codes are 6 digits and looked up globally, so a sender guessing many
+    // could eventually hit someone else's live code and link their number to
+    // that account. Cap failed attempts per sender; past the cap, stay silent.
+    const guessKey = `wa-verify:${m.from}`;
+    if (!(await underLimit(env.DB, guessKey, LIMITS.whatsappVerifyPerSender))) return;
     const v = await findPhoneVerificationByCode(env.DB, code, now);
     if (v) {
       await linkUserPhone(env.DB, v.user_id, m.from);
-      console.log(`whatsapp linked ${m.from} to user ${v.user_id}`);
+      console.log(`whatsapp linked ${maskPhone(m.from)} to user ${v.user_id}`);
       await reply(
         env,
         m.from,
@@ -140,7 +147,7 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
       if (claimedToday >= MAX_GUEST_WATCHES_PER_PHONE_PER_DAY) {
         await cancelWatch(env.DB, w.id);
         await deleteWatchPhoneVerification(env.DB, w.id);
-        console.log(`whatsapp guest watch ${w.id} refused: ${m.from} at daily cap`);
+        console.log(`whatsapp guest watch ${w.id} refused: ${maskPhone(m.from)} at daily cap`);
         await reply(env, m.from, `This number already has ${MAX_GUEST_WATCHES_PER_PHONE_PER_DAY} shipment alerts today. Create a free ShipTrack account to watch more: ${env.APP_URL}`);
         return;
       }
@@ -148,13 +155,13 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
       if (dup) {
         await cancelWatch(env.DB, w.id);
         await deleteWatchPhoneVerification(env.DB, w.id);
-        console.log(`whatsapp guest watch ${w.id} duplicate of ${dup.id} for ${m.from}`);
+        console.log(`whatsapp guest watch ${w.id} duplicate of ${dup.id} for ${maskPhone(m.from)}`);
         await reply(env, m.from, `You're already getting WhatsApp updates for ${shipment} here.`);
         return;
       }
       const linked = await linkWatchPhone(env.DB, w.id, m.from);
       if (!linked) return; // lost a race with the sweep; nothing to say
-      console.log(`whatsapp guest watch ${w.id} (${w.carrier}/${w.tracking_number}) linked to ${m.from}`);
+      console.log(`whatsapp guest watch ${w.id} (${w.carrier}/${w.tracking_number}) linked to ${maskPhone(m.from)}`);
       await reply(
         env,
         m.from,
@@ -162,6 +169,8 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
       );
       return;
     }
+    // A miss counts against the sender's guess budget.
+    await recordEvent(env.DB, guessKey);
     // Consumed or expired. If this number is already linked, the overwhelmingly
     // likely cause is the relay redelivering the very message that linked it
     // (Meta retries when any other receiver of our shared number was down) —
@@ -182,7 +191,7 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
     if (user) await setWhatsappOptIn(env.DB, user.id, false);
     const stopped = await cancelGuestWatchesForPhone(env.DB, m.from);
     if (user || stopped > 0) {
-      console.log(`whatsapp STOP from ${m.from}${user ? ` (user ${user.id})` : ""}${stopped ? ` — ${stopped} guest watch(es) cancelled` : ""}`);
+      console.log(`whatsapp STOP from ${maskPhone(m.from)}${user ? ` (user ${user.id})` : ""}${stopped ? ` — ${stopped} guest watch(es) cancelled` : ""}`);
       await reply(
         env,
         m.from,
@@ -196,7 +205,7 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
   if (isStartMessage(text)) {
     if (user) {
       await setWhatsappOptIn(env.DB, user.id, true);
-      console.log(`whatsapp START from ${m.from} (user ${user.id})`);
+      console.log(`whatsapp START from ${maskPhone(m.from)} (user ${user.id})`);
       await reply(env, m.from, "ShipTrack WhatsApp alerts are back on.");
     } else if ((await countGuestWatchesForPhoneSince(env.DB, m.from, 0)) > 0) {
       // Cancelled guest watches aren't revived — the shipment may be long
@@ -206,9 +215,10 @@ async function handleInbound(env: AppEnv, m: InboundMessage): Promise<void> {
     return;
   }
 
-  // A reply to an alert ("this tracking detail is wrong"), or an unrelated
-  // message. Surface it in the worker logs; there is no inbox yet.
-  console.log(`whatsapp reply from ${m.from}${user ? ` (user ${user.id})` : " (unknown number)"}: ${text.slice(0, 300)}`);
+  // A reply to an alert, or an unrelated message. The text itself isn't logged:
+  // this number doubles as the support line, so it can be anything personal.
+  // Support conversations are read in Chatwoot, which receives the same message.
+  console.log(`whatsapp reply from ${maskPhone(m.from)}${user ? ` (user ${user.id})` : " (unknown number)"} (${text.length} chars)`);
 }
 
 // In-window free-text reply. Best-effort: the linking/opt-out already happened.
@@ -217,6 +227,6 @@ async function reply(env: AppEnv, to: string, body: string): Promise<void> {
   try {
     await sendText(env, to, body);
   } catch (err) {
-    console.warn("whatsapp reply failed", { to, error: err instanceof Error ? err.message : String(err) });
+    console.warn("whatsapp reply failed", { to: maskPhone(to), error: err instanceof Error ? err.message : String(err) });
   }
 }

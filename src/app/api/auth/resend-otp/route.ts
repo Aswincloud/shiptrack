@@ -5,6 +5,7 @@ import { getUserByEmail } from "@/lib/db";
 import { resendOtp } from "@aswincloud/auth/d1";
 import { makeSendEmail } from "@/lib/authpkg";
 import { otpEmail } from "@/lib/email";
+import { LIMITS, RATE_LIMITED, clientIp, recordEvent, take, underLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -23,23 +24,20 @@ export async function POST(req: NextRequest) {
   }
   const email = parsed.data.email.toLowerCase();
 
-  // Only resend for unverified accounts. Generic 200 otherwise (anti-enumeration).
-  const user = await getUserByEmail(env.DB, email);
-  if (!user || user.email_verified === 1) {
-    return NextResponse.json({ status: "ok" }, { status: 200 });
-  }
-
-  const r = await resendOtp(env.DB, {
-    email,
-    secret: env.TOKEN_SECRET,
-    sendEmail: makeSendEmail(env)!,
-    renderOtp: ({ code, ttlMinutes }) => otpEmail({ code, ttlMinutes }),
-  });
-  if (!r.ok) {
-    if (r.error === "cooldown") return NextResponse.json({ error: "cooldown" }, { status: 429 });
-    if (r.error === "send_failed") return NextResponse.json({ error: "send_failed" }, { status: 502 });
-    // no_account — racey delete between the check and here; stay generic.
-    return NextResponse.json({ status: "ok" }, { status: 200 });
+  // Same generic 200 for every outcome — no account, already verified, in the
+  // cooldown, over the limit, or sent — so the response never reveals whether
+  // an unverified account exists for this address.
+  const allowed =
+    (await take(env.DB, `send:email:${email}`, LIMITS.sendPerEmail)) &&
+    (await take(env.DB, `send:ip:${clientIp(req)}`, LIMITS.sendPerIp));
+  const user = allowed ? await getUserByEmail(env.DB, email) : null;
+  if (user && user.email_verified !== 1) {
+    await resendOtp(env.DB, {
+      email,
+      secret: env.TOKEN_SECRET,
+      sendEmail: makeSendEmail(env)!,
+      renderOtp: ({ code, ttlMinutes }) => otpEmail({ code, ttlMinutes }),
+    }).catch(() => {});
   }
   return NextResponse.json({ status: "ok" }, { status: 200 });
 }

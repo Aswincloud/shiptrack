@@ -968,17 +968,33 @@ export async function countPhoneOtpSendsForPhoneSince(db: D1Database, phone: str
   return row?.n ?? 0;
 }
 
-/** Drop expired codes and the send log behind the daily limits once it is a day old. */
+/** Drop expired codes, and the send log and rate_events behind the limits once a day old. */
 export async function purgeExpiredPhoneOtps(db: D1Database, now: number): Promise<void> {
   await db.batch([
     db.prepare(`DELETE FROM phone_otp_codes WHERE expires_at < ?`).bind(now),
     db.prepare(`DELETE FROM guest_phone_otp_codes WHERE expires_at < ?`).bind(now),
     db.prepare(`DELETE FROM phone_otp_sends WHERE created_at < ?`).bind(now - 24 * 60 * 60),
+    db.prepare(`DELETE FROM rate_events WHERE created_at < ?`).bind(now - 24 * 60 * 60),
   ]);
 }
 
 export async function markEmailVerified(db: D1Database, userId: string): Promise<void> {
   await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = ?`).bind(userId).run();
+}
+
+/**
+ * A provider has just proved this address belongs to the person signing in,
+ * but the account was never verified — so whoever registered it (and set its
+ * password) may not be them. Verify it and replace the password with the
+ * OAuth-only sentinel in one statement, so a password planted by an attacker
+ * who pre-registered the email stops working. The changed password also
+ * changes the security stamp, signing out any session they held.
+ */
+export async function claimUnverifiedForOAuth(db: D1Database, userId: string, oauthOnlyHash: string): Promise<void> {
+  await db
+    .prepare(`UPDATE users SET email_verified = 1, password_hash = ? WHERE id = ? AND email_verified != 1`)
+    .bind(oauthOnlyHash, userId)
+    .run();
 }
 
 // Email change is now self-service (token-verified) via @aswincloud/auth/d1;

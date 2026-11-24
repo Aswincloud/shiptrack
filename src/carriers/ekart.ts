@@ -1,5 +1,6 @@
 import { Carrier, CarrierError, ShipmentStatus, TrackingEvent, TrackingResult } from "./types";
 import { carryForwardStatus, overallStatus, isFailedAttempt } from "./normalize";
+import { validTrackingNumber } from "./validate";
 
 // Ekart Logistics (ekartlogistics.com) — Flipkart's in-house courier. No
 // developer API or credentials. Their public tracking page is a React SPA that
@@ -135,7 +136,7 @@ export const ekart: Carrier = {
   name: "Ekart (Flipkart)",
   async track(trackingNumber: string): Promise<TrackingResult> {
     const cleaned = trackingNumber.trim().toUpperCase();
-    if (!/^[A-Z]{2,6}[0-9]{6,14}$/.test(cleaned)) {
+    if (!validTrackingNumber("ekart", cleaned)) {
       throw new CarrierError("Invalid Ekart tracking ID format.", "invalid_input", 400);
     }
 

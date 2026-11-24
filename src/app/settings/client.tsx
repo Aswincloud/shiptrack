@@ -60,6 +60,7 @@ export function SettingsClient(props: Props) {
         initialName={props.name}
         createdAt={props.createdAt}
         isAdmin={props.isAdmin}
+        hasPassword={props.hasPassword}
       />
       {props.whatsapp.otpAvailable && <WhatsAppSection initial={props.whatsapp} />}
       <ApiKeysSection initial={props.apiKeys} max={props.maxApiKeys} appUrl={props.appUrl} />
@@ -78,11 +79,13 @@ function ProfileSection({
   initialName,
   createdAt,
   isAdmin,
+  hasPassword,
 }: {
   email: string;
   initialName: string | null;
   createdAt: number;
   isAdmin: boolean;
+  hasPassword: boolean;
 }) {
   const [name, setName] = useState(initialName ?? "");
   const [saving, setSaving] = useState(false);
@@ -91,6 +94,7 @@ function ProfileSection({
   // Self-service email change: submit a new address, we email it a confirm link.
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [requestedEmail, setRequestedEmail] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
   const [emailSubmitting, setEmailSubmitting] = useState(false);
   const [emailFeedback, setEmailFeedback] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
@@ -118,7 +122,7 @@ function ProfileSection({
     const res = await fetch("/api/auth/email-change-requests", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ newEmail: target }),
+      body: JSON.stringify({ newEmail: target, ...(hasPassword ? { currentPassword: emailPassword } : {}) }),
     });
     setEmailSubmitting(false);
     if (res.ok) {
@@ -128,11 +132,18 @@ function ProfileSection({
         text: `Check ${target} for a confirmation link to finish the change.`,
       });
       setRequestedEmail("");
+      setEmailPassword("");
       return;
     }
     const j = await res.json().catch(() => ({}));
     const msg =
-      j.error === "same_as_current"
+      j.error === "invalid_credentials"
+        ? "That password isn't right."
+        : j.error === "current_password_required"
+          ? "Enter your current password to change your email."
+          : j.error === "rate_limited"
+            ? "Too many attempts. Please wait a few minutes."
+            : j.error === "same_as_current"
         ? "That's already your current email."
         : j.error === "email_taken"
           ? "That email is already in use by another account."
@@ -187,6 +198,19 @@ function ProfileSection({
                   style={inputStyle}
                 />
               </label>
+              {hasPassword && (
+                <label style={{ ...labelStyle, fontSize: 12 }}>
+                  Current password
+                  <input
+                    type="password"
+                    value={emailPassword}
+                    onChange={(e) => setEmailPassword(e.target.value)}
+                    required
+                    autoComplete="current-password"
+                    style={inputStyle}
+                  />
+                </label>
+              )}
               <div style={{ fontSize: 12, color: "var(--muted)" }}>
                 We&apos;ll email a confirmation link to the new address. The change
                 applies once you click it.

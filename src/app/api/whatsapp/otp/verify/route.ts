@@ -12,6 +12,7 @@ import {
   PHONE_OTP_MAX_ATTEMPTS,
 } from "@/lib/db";
 import { whatsappStatusFor } from "@/lib/whatsapp-status";
+import { maskPhone } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
   }
 
   await linkUserPhone(env.DB, user.id, otp.phone); // also clears both code tables
-  console.log(`whatsapp linked ${otp.phone} to user ${user.id} via one-time code`);
+  console.log(`whatsapp linked ${maskPhone(otp.phone)} to user ${user.id} via one-time code`);
   const fresh = (await getUserById(env.DB, user.id)) ?? user;
   return NextResponse.json(whatsappStatusFor(env, fresh, null, null));
 }

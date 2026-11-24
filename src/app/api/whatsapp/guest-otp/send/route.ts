@@ -20,6 +20,7 @@ import {
   PHONE_OTP_TTL_SECONDS,
 } from "@/lib/db";
 import { formatPhoneForDisplay, normalizePhone, sendOtp, whatsappOtpConfigured, WhatsAppError } from "@/lib/whatsapp";
+import { validTrackingNumber, normaliseTrackingNumber } from "@/carriers/validate";
 
 export const dynamic = "force-dynamic";
 
@@ -46,13 +47,26 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: "invalid_input" }, { status: 400 });
   const carrier = parsed.data.carrier.toLowerCase();
   if (!getCarrier(carrier)) return NextResponse.json({ error: "carrier_not_supported" }, { status: 400 });
-  const trackingNumber = parsed.data.trackingNumber.trim();
+  if (!validTrackingNumber(carrier, parsed.data.trackingNumber)) {
+    return NextResponse.json({ error: "invalid_tracking_number" }, { status: 400 });
+  }
+  const trackingNumber = normaliseTrackingNumber(carrier, parsed.data.trackingNumber);
   const phone = normalizePhone(parsed.data.phone);
   if (!phone) return NextResponse.json({ error: "invalid_phone" }, { status: 400 });
 
   const now = Math.floor(Date.now() / 1000);
+  // Only cf-connecting-ip: Cloudflare sets it at the edge, unlike
+  // x-forwarded-for which the client controls.
+  const ip = req.headers.get("cf-connecting-ip") || "unknown";
+  const ipKey = `guest:${ip}`;
+  const dayAgo = now - 86400;
+  // Per-IP limit first, so the "already watching" answer below can't be used
+  // as a free, unlimited lookup of which numbers watch which shipments.
+  if ((await countPhoneOtpSendsForUserSince(env.DB, ipKey, dayAgo)) >= MAX_GUEST_OTP_SENDS_PER_IP_PER_DAY) {
+    return NextResponse.json({ error: "rate_limited" }, { status: 429 });
+  }
   if (await findActiveGuestWatchForPhone(env.DB, phone, carrier, trackingNumber)) {
-    return NextResponse.json({ error: "already_watching", phoneDisplay: formatPhoneForDisplay(phone) }, { status: 409 });
+    return NextResponse.json({ error: "already_watching" }, { status: 409 });
   }
   if ((await countGuestWatchesForPhoneSince(env.DB, phone, now - 86400)) >= MAX_GUEST_WATCHES_PER_PHONE_PER_DAY) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
@@ -64,11 +78,7 @@ export async function POST(req: NextRequest) {
       { status: 429 },
     );
   }
-  const ip = req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const ipKey = `guest:${ip}`;
-  const dayAgo = now - 86400;
   if (
-    (await countPhoneOtpSendsForUserSince(env.DB, ipKey, dayAgo)) >= MAX_GUEST_OTP_SENDS_PER_IP_PER_DAY ||
     (await countPhoneOtpSendsForPhoneSince(env.DB, phone, dayAgo)) >= MAX_PHONE_OTP_SENDS_PER_PHONE_PER_DAY ||
     (await countAllPhoneOtpSendsSince(env.DB, now - 3600, "guest:")) >= MAX_GUEST_OTP_SENDS_PER_HOUR
   ) {

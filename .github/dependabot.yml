@@ -4,6 +4,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Wait a week after a release before proposing it. Minor/patch bumps are
+    # auto-merged and deployed, so this gives time for a hijacked or broken
+    # release to be noticed and pulled before it reaches production.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     # Minor and patch bumps arrive as one weekly PR, which
     # dependabot-automerge.yml merges once both Workers builds pass. Majors

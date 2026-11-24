@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import type { D1Database } from "@cloudflare/workers-types";
 import { signToken, verifyToken } from "@aswincloud/auth";
+import { securityStamp } from "@aswincloud/auth/d1";
 import { getUserById } from "./db";
+import { getEnvAsync } from "./env";
 import { userIdForApiKey, API_KEY_PREFIX } from "./api-keys";
 
 export const SESSION_COOKIE_NAME = "shiptrack_session";
@@ -12,9 +14,36 @@ export interface Session {
   userId: string;
 }
 
-export async function createSessionCookie(secret: string, userId: string): Promise<string> {
-  const token = await signToken(secret, userId, "session", SESSION_TTL_SECONDS);
+// A session token's subject is `<userId>.<stamp>`, where the stamp is a
+// fingerprint of the user's current password hash (securityStamp). Changing or
+// resetting the password, or wiping it when an OAuth login takes over an
+// unverified account, changes the stamp — so every existing session for that
+// account stops working at once, including a stolen one. Tokens are otherwise
+// stateless (HMAC + expiry); the stamp check costs one indexed user lookup.
+// Tokens minted before this scheme (subject = bare userId) fail the check, so
+// everyone signed in before it shipped was asked to sign in again once.
+
+/** Sign a session for this user. Pass the db so the stamp is read fresh. */
+export async function createSessionCookie(secret: string, userId: string, db?: D1Database): Promise<string> {
+  const dbx = db ?? (await getEnvAsync())?.DB;
+  const user = dbx ? await getUserById(dbx, userId) : null;
+  if (!user) throw new Error("createSessionCookie: user not found");
+  const token = await signToken(secret, `${user.id}.${await securityStamp(user)}`, "session", SESSION_TTL_SECONDS);
   return cookieHeader(token, SESSION_TTL_SECONDS);
+}
+
+/** Resolve a verified session subject to a live user whose stamp still matches. */
+async function sessionUser(subject: string | null): Promise<Session | null> {
+  if (!subject) return null;
+  const dot = subject.lastIndexOf(".");
+  if (dot <= 0) return null; // pre-stamp token
+  const userId = subject.slice(0, dot);
+  const db = (await getEnvAsync())?.DB;
+  if (!db) return null;
+  const user = await getUserById(db, userId);
+  if (!user) return null; // deleted account
+  if ((await securityStamp(user)) !== subject.slice(dot + 1)) return null; // password changed since
+  return { userId: user.id };
 }
 
 export function clearSessionCookie(): string {
@@ -24,8 +53,7 @@ export function clearSessionCookie(): string {
 export async function readSession(secret: string, req: NextRequest): Promise<Session | null> {
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
-  const userId = await verifyToken(secret, token, "session");
-  return userId ? { userId } : null;
+  return sessionUser(await verifyToken(secret, token, "session"));
 }
 
 // Server-component variant. Reads the cookie via next/headers.
@@ -33,8 +61,7 @@ export async function readSessionFromCookies(secret: string): Promise<Session | 
   const store = await cookies();
   const token = store.get(SESSION_COOKIE_NAME)?.value;
   if (!token) return null;
-  const userId = await verifyToken(secret, token, "session");
-  return userId ? { userId } : null;
+  return sessionUser(await verifyToken(secret, token, "session"));
 }
 
 export async function requireSession(secret: string, req: NextRequest): Promise<Session | NextResponse> {

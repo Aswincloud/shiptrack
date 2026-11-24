@@ -16,7 +16,10 @@ concurrency:
 
 jobs:
   approve:
-    uses: Aswincloud/.github/.github/workflows/auto-approve.yml@main
+    # Pinned to a commit: this job runs on pull_request_target and is handed an
+    # App private key and a write PAT, so a moving @main would let any push to
+    # the org .github repo change the code that receives them. Bump deliberately.
+    uses: Aswincloud/.github/.github/workflows/auto-approve.yml@9a3baf829b2fe4735b149b902a0f1e9bb3c2164d # main @ 2026-11-24
     # Pass ONLY the three secrets the reusable workflow declares — not
     # `secrets: inherit`, which would forward every org secret (Cloudflare,
     # Resend, PATs, ...) into a workflow that has no business seeing them.
